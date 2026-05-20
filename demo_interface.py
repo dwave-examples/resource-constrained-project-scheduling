@@ -20,12 +20,9 @@ from dash import dcc, html
 import dash_mantine_components as dmc
 
 from demo_configs import (
-    CHECKLIST,
     DESCRIPTION,
-    DROPDOWN,
     MAIN_HEADER,
-    RADIO,
-    SLIDER,
+    RUNS,
     SOLVER_TIME,
     THUMBNAIL,
 )
@@ -240,40 +237,22 @@ def generate_settings_form() -> html.Div:
     Returns:
         A Div containing the settings for selecting the scenario, model, and solver.
     """
-    dropdown_options = generate_options(DROPDOWN)
-    checklist_options = generate_options(CHECKLIST)
-    radio_options = generate_options(RADIO)
     solver_options = generate_options(SolverType)
 
     return html.Div(
         className="settings",
         children=[
             slider(
-                "Example Slider",
-                "slider",
-                SLIDER,
-            ),
-            dropdown(
-                "Example Dropdown",
-                "dropdown",
-                sorted(dropdown_options, key=lambda op: op["value"]),
+                "Runs Per Formulation",
+                "runs",
+                RUNS,
             ),
             checklist(
-                "Example Checklist",
-                "checklist",
-                sorted(checklist_options, key=lambda op: op["value"]),
-                [checklist_options[0]["value"]],
-            ),
-            radio(
-                "Example Radio",
-                "radio",
-                sorted(radio_options, key=lambda op: op["value"]),
-                radio_options[0]["value"],
-            ),
-            dropdown(
-                "Solver",
-                "solver-type-select",
+                "Formulations To Compare",
+                "solver-selection",
                 sorted(solver_options, key=lambda op: op["value"]),
+                [option["value"] for option in solver_options],
+                inline=False,
             ),
             input(
                 "Solver Time Limit (seconds)",

@@ -1,17 +1,38 @@
-from demo_configs import INPUTS
-import pulp
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Any
+
 import numpy as np
-import pandas as pd
+import pulp
 
-from dwave.optimization import Model, put
-import dwave.optimization
-from dwave.optimization import Model, put, symbols
-from dwave.optimization.mathematical import concatenate, argsort
-from dwave.system import LeapHybridNLSampler
+try:
+    import dwave.optimization
+    from dwave.optimization import Model, put, symbols
+    from dwave.optimization.mathematical import argsort, concatenate
+    from dwave.system import LeapHybridNLSampler
+except Exception:  # pragma: no cover - optional dependency
+    dwave = None
+    Model = None
+    put = None
+    symbols = None
+    concatenate = None
+    argsort = None
+    LeapHybridNLSampler = None
 
-def create_runtime_use_matrices():
 
-    variables, problem = pulp.LpProblem.fromMPS(INPUTS[0])
+LOWER_BOUNDS = [
+    0, 0, 6, 79, 5, 83, 35, 62, 67, 76, 29, 35, 39, 79, 103,
+    10, 44, 89, 13, 107, 19, 53, 93, 56, 113, 85, 103, 62, 113, 116,
+]
+UPPER_BOUNDS = [
+    90, 87, 93, 166, 100, 175, 127, 154, 159, 163, 116, 186, 131, 188, 190,
+    102, 136, 181, 105, 194, 111, 140, 185, 143, 209, 200, 207, 182, 205, 208,
+]
+
+def create_runtime_use_matrices(input_path: str):
+
+    _, problem = pulp.LpProblem.fromMPS(input_path)
 
     data = problem.to_dict()
 
@@ -89,8 +110,8 @@ def create_runtime_use_matrices():
 
     return runtimes_matrix, rm_use_matrix, rt_use_matrix
 
-def create_precedence_pairs():
-    variables, problem = pulp.LpProblem.fromMPS(INPUTS[0])
+def create_precedence_pairs(input_path: str):
+    _, problem = pulp.LpProblem.fromMPS(input_path)
     data = problem.to_dict()
 
     precedence_pairs = []
@@ -106,13 +127,18 @@ def create_precedence_pairs():
 
     return precedence_pairs
 
-def create_model(lower_bounds, upper_bounds, runtimes_matrix, rm_use_matrix, rt_use_matrix,
-                 precedence_pairs):
+def create_model(
+    lower_bounds,
+    upper_bounds,
+    runtimes_matrix,
+    rm_use_matrix,
+    rt_use_matrix,
+    precedence_pairs,
+):
     # accumulate zip formulation
     model = Model()
 
     num_jobs = 30
-    time_horizon = 213
     upper_bounds_modes = [2,2,2,2,2,2,2,2,2,1,2,2,2,2,2,1,2,2,2,2,2,1,2,2,2,2,2,2,1,2]
 
     starts = model.integer(num_jobs, lower_bound=lower_bounds, upper_bound=upper_bounds)
@@ -185,33 +211,58 @@ def create_model(lower_bounds, upper_bounds, runtimes_matrix, rm_use_matrix, rt_
     return model
 
 
-lower_bounds = [0,0,6,79,5,83,35,62,67,76,29,35,39,79,103,10,44,89,13,107,19,53,93,56,
-                113,85,103,62,113,116]
-upper_bounds = [90,87,93,166,100,175,127,154,159,163,116,186,131,188,190,102,136,181,
-                105,194,111,140,185,143,209,200,207,182,205,208]
-
-runtimes_matrix, rm_use_matrix, rt_use_matrix = create_runtime_use_matrices()
-precedence_pairs = create_precedence_pairs()
+@lru_cache(maxsize=4)
+def _preprocessed_data(input_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tuple[int, int]]]:
+    runtimes_matrix, rm_use_matrix, rt_use_matrix = create_runtime_use_matrices(input_path)
+    precedence_pairs = create_precedence_pairs(input_path)
+    return runtimes_matrix, rm_use_matrix, rt_use_matrix, precedence_pairs
 
 
-data = []
-time_limits = [5,10]
+def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
+    """Run the Stride nonlinear formulation once and return comparable result metadata."""
+    if LeapHybridNLSampler is None:
+        return {
+            "solver": "Stride (NL)",
+            "status": "Unavailable: dwave optimization packages not installed",
+            "energy": None,
+            "ok": False,
+        }
 
-for time in time_limits:
-    for _ in range(1):
-        model = create_model(lower_bounds, upper_bounds, runtimes_matrix, rm_use_matrix,
-                            rt_use_matrix, precedence_pairs)
+    try:
+        runtimes_matrix, rm_use_matrix, rt_use_matrix, precedence_pairs = _preprocessed_data(input_path)
+
+        model = create_model(
+            LOWER_BOUNDS,
+            UPPER_BOUNDS,
+            runtimes_matrix,
+            rm_use_matrix,
+            rt_use_matrix,
+            precedence_pairs,
+        )
         model.lock()
-        solver = LeapHybridNLSampler()
-        solver.sample(model, time_limit = time)
-        energy = model.objective.state()
-        feas = all(sym.state() for sym in model.iter_constraints())
 
-        data.append({
-            'solver': 'Stride solver',
-            'time': time,
-            'feasibility': feas,
-            'energy': energy
-        })
-        df = pd.DataFrame(data)
-        df.to_csv('nl_rcpsp.csv', index=False)
+        solver = LeapHybridNLSampler()
+        solver.sample(model, time_limit=time_limit)
+
+        return {
+            "solver": "Stride (NL)",
+            "status": "Completed",
+            "energy": model.objective.state(),
+            "ok": all(sym.state() for sym in model.iter_constraints()),
+        }
+    except Exception as exc:  # pragma: no cover - runtime/system dependent
+        return {
+            "solver": "Stride (NL)",
+            "status": f"Error: {exc}",
+            "energy": None,
+            "ok": False,
+        }
+
+
+if __name__ == "__main__":
+    import pandas as pd
+
+    rows = []
+    for limit in [5, 10]:
+        rows.append({"time": limit, **solve_stride(limit, input_path="input/30n20b8.mps")})
+    pd.DataFrame(rows).to_csv("nl_rcpsp.csv", index=False)

@@ -16,10 +16,11 @@
 
 THUMBNAIL = "static/dwave_logo.svg"
 
-APP_TITLE = "Demo Name"
-MAIN_HEADER = "Demo Name"
+APP_TITLE = "Resource-Constrained Project Scheduling"
+MAIN_HEADER = "Resource-Constrained Project Scheduling"
 DESCRIPTION = """\
-This is a Dash template for new examples. It includes some basic settings, tabs, and styling.
+Compare objective values and solver statuses for three formulations on the same RCPSP instance:
+HiGHS MILP, SCIP MILP, and D-Wave Stride NL.
 """
 
 INPUTS = ["input/30n20b8.mps"]
@@ -28,26 +29,17 @@ INPUTS = ["input/30n20b8.mps"]
 # Sliders, buttons and option entries #
 #######################################
 
-# an example slider
-SLIDER = {
+# number of repeated runs per formulation
+RUNS = {
     "min": 1,
-    "max": 10,
+    "max": 5,
     "step": 1,
-    "value": 5,
+    "value": 2,
 }
-
-# an example dropdown
-DROPDOWN = ["Option 1", "Option 2"]
-
-# an example checklist
-CHECKLIST = ["Option 1", "Option 2"]
-
-# an example radio list
-RADIO = ["Option 1", "Option 2"]
 
 # solver time limits in seconds (value means default)
 SOLVER_TIME = {
-    "min": 10,
+    "min": 5,
     "max": 300,
     "step": 5,
     "value": 10,

@@ -15,11 +15,13 @@
 from __future__ import annotations
 
 import dash
+from dash import html
 from dash import MATCH
 from dash.dependencies import Input, Output, State
 
+from demo_configs import INPUTS
 from demo_interface import generate_table
-from src.demo_enums import SolverType
+from src.demo_runner import compare_formulations, summarize_runs
 
 
 @dash.callback(
@@ -56,20 +58,34 @@ def toggle_left_column(collapse_trigger: int, to_collapse_class: str) -> tuple[s
 @dash.callback(
     Output("input", "children"),
     inputs=[
-        Input("slider", "value"),
+        Input("runs", "value"),
+        Input("solver-selection", "value"),
+        Input("solver-time-limit", "value"),
     ],
 )
-def render_initial_state(slider_value: int) -> str:
+def render_initial_state(runs: int, selection: list[str], time_limit: float) -> html.Div:
     """Runs on load and any time the value of the slider is updated.
         Add `prevent_initial_call=True` to skip on load runs.
 
     Args:
-        slider_value: The value of the slider.
+        runs: Number of repeated runs per formulation.
+        selection: Selected formulation IDs.
+        time_limit: The per-solver time limit.
 
     Returns:
         The content of the input tab.
     """
-    return f"Put demo visuals here. The current slider value is {slider_value}."
+    selected_count = len(selection or [])
+    return html.Div(
+        [
+            html.H3("Ready To Compare Formulations"),
+            html.P(
+                f"Configured {selected_count} formulation(s), "
+                f"{runs} run(s) each, {time_limit} second time limit per run."
+            ),
+            html.P("Click Run Optimization to generate a summary table and detailed run table."),
+        ]
+    )
 
 
 @dash.callback(
@@ -81,12 +97,9 @@ def render_initial_state(slider_value: int) -> str:
         # The first string in the Input/State elements below must match an id in demo_interface.py
         # Remove or alter the following id's to match any changes made to demo_interface.py
         Input("run-button", "n_clicks"),
-        State("solver-type-select", "value"),
+        State("solver-selection", "value"),
         State("solver-time-limit", "value"),
-        State("slider", "value"),
-        State("dropdown", "value"),
-        State("checklist", "value"),
-        State("radio", "value"),
+        State("runs", "value"),
     ],
     running=[
         (Output("cancel-button", "style"), {}, {"display": "none"}),  # Show/hide cancel button.
@@ -103,13 +116,10 @@ def run_optimization(
     # The parameters below must match the `Input` and `State` variables found
     # in the `inputs` list above.
     run_click: int,
-    solver_type: str,
+    solver_selection: list[str],
     time_limit: float,
-    slider_value: int,
-    dropdown_value: int,
-    checklist_value: list,
-    radio_value: int,
-) -> tuple[str, list]:
+    runs: int,
+) -> tuple[html.Div, html.Table]:
     """Runs the optimization and updates UI accordingly.
 
     This is the main function which is called when the ``Run Optimization`` button is clicked.
@@ -119,31 +129,65 @@ def run_optimization(
 
     Args:
         run_click: The (total) number of times the run button has been clicked.
-        solver_type: The solver to use for the optimization run defined by SolverType in demo_enums.py.
+        solver_selection: Selected formulations to run.
         time_limit: The solver time limit.
-        slider_value: The value of the slider.
-        dropdown_value: The value of the dropdown.
-        checklist_value: A list of the values of the checklist.
-        radio_value: The value of the radio.
+        runs: Number of repeated runs.
 
     Returns:
         A tuple containing:
 
-        - str: The results to display in the results tab.
+        - html.Div: The results component to display in the results tab.
         - list: List of the table rows for the problem details table.
     """
+    selection = solver_selection or []
+    if not selection:
+        results = html.Div([html.P("Select at least one formulation before running.")])
+        problem_details_table = generate_table(
+            {
+                "Selected Formulations": [0],
+                "Runs Per Formulation": [runs],
+                "Time Limit (s)": [time_limit],
+            }
+        )
+        return results, problem_details_table
 
-    solver_type = SolverType(int(solver_type))
+    run_rows = compare_formulations(selection, float(time_limit), int(runs), input_path=INPUTS[0])
+    summary_rows = summarize_runs(run_rows)
 
-
-    ###########################
-    ### YOUR CODE GOES HERE ###
-    ###########################
-
-
-    # Generates the problem details table on the results page.
-    problem_details_table = generate_table(
-        {"Solver": [solver_type.label], "Time Limit": [time_limit]}
+    summary_table = generate_table(
+        {
+            "Formulation": [row["formulation"] for row in summary_rows],
+            "Runs": [row["runs"] for row in summary_rows],
+            "OK Runs": [row["ok_runs"] for row in summary_rows],
+            "Best Energy": [row["best_energy"] for row in summary_rows],
+            "Avg Energy": [row["avg_energy"] for row in summary_rows],
+        }
+    )
+    detailed_table = generate_table(
+        {
+            "Formulation": [row["formulation"] for row in run_rows],
+            "Run": [row["run"] for row in run_rows],
+            "Status": [row["status"] for row in run_rows],
+            "Energy": [row["energy"] if row["energy"] is not None else "n/a" for row in run_rows],
+            "OK": ["yes" if row["ok"] else "no" for row in run_rows],
+        }
     )
 
-    return "Put demo results here.", problem_details_table
+    results = html.Div(
+        [
+            html.H3("Comparison Summary"),
+            summary_table,
+            html.H3("Run-Level Details"),
+            detailed_table,
+        ]
+    )
+
+    problem_details_table = generate_table(
+        {
+            "Selected Formulations": [len(selection)],
+            "Runs Per Formulation": [runs],
+            "Time Limit (s)": [time_limit],
+        }
+    )
+
+    return results, problem_details_table

@@ -16,18 +16,18 @@ from enum import Enum
 
 
 class SolverType(Enum):
-    """Add a list of solver options here. If this demo only requires 1 solver,
-    this functionality can be removed.
-    """
+    """Supported formulations for RCPSP comparison."""
 
-    SOLVER_1 = 0
-    SOLVER_2 = 1
+    HIGHS = 0
+    SCIP = 1
+    STRIDE = 2
 
     @property
     def label(self):
         return {
-            SolverType.SOLVER_1: "Solver 1",
-            SolverType.SOLVER_2: "Solver 2",
+            SolverType.HIGHS: "HiGHS (MILP)",
+            SolverType.SCIP: "SCIP (MILP)",
+            SolverType.STRIDE: "Stride (NL)",
         }[self]
 
 
