@@ -1,0 +1,365 @@
+# Copyright 2026 D-Wave
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from __future__ import annotations
+
+import re
+from collections import defaultdict, deque
+from pathlib import Path
+
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+
+def _parse_mps_structure(input_path: str) -> dict:
+    """Parse MPS sections to extract precedence, resource usage, and capacities."""
+    path = Path(input_path)
+    if not path.exists() or not path.is_file():
+        return {
+            "jobs": [],
+            "edges": [],
+            "durations": {},
+            "mechanic_use": {},
+            "technician_use": {},
+            "capacities": {"Mechaniker": 0.0, "Techniker": 0.0},
+        }
+
+    rows: list[str] = []
+    columns: list[str] = []
+    rhs: list[str] = []
+
+    section = ""
+    for raw_line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("*"):
+            continue
+        upper = line.upper()
+        if upper == "ROWS":
+            section = "ROWS"
+            continue
+        if upper == "COLUMNS":
+            section = "COLUMNS"
+            continue
+        if upper == "RHS":
+            section = "RHS"
+            continue
+        if upper in {"RANGES", "BOUNDS", "ENDATA"}:
+            section = ""
+            continue
+
+        if section == "ROWS":
+            rows.append(line)
+        elif section == "COLUMNS":
+            columns.append(line)
+        elif section == "RHS":
+            rhs.append(line)
+
+    edge_pattern = re.compile(r"precedence_(\d+)_(\d+)")
+    edges = []
+    jobs = set()
+
+    for row in rows:
+        tokens = row.split()
+        if len(tokens) >= 2:
+            name = tokens[1]
+            match = edge_pattern.search(name)
+            if match:
+                src = int(match.group(1))
+                dst = int(match.group(2))
+                edges.append((src, dst))
+                jobs.update([src, dst])
+            elif name.startswith("start_"):
+                jobs.add(int(name.split("_")[-1]))
+
+    rm_sets = defaultdict(set)
+    rt_sets = defaultdict(set)
+    rm_use = defaultdict(float)
+    rt_use = defaultdict(float)
+    x_pattern = re.compile(r"x_(\d+)_(\d+)_(\d+)")
+
+    for line in columns:
+        tokens = line.split()
+        if len(tokens) < 3:
+            continue
+
+        var_name = tokens[0]
+        m_var = x_pattern.match(var_name)
+        if not m_var:
+            continue
+
+        job = int(m_var.group(1))
+        mode = int(m_var.group(2))
+        start_t = int(m_var.group(3))
+        jobs.add(job)
+
+        pairs = tokens[1:]
+        for i in range(0, len(pairs) - 1, 2):
+            row_name = pairs[i]
+            try:
+                value = float(pairs[i + 1])
+            except ValueError:
+                continue
+
+            if row_name.startswith("rescap_Mechaniker_"):
+                const_t = int(row_name.split("_")[-1])
+                rm_sets[(job, mode, start_t)].add(const_t)
+                rm_use[(job, mode)] = max(rm_use[(job, mode)], value)
+            elif row_name.startswith("rescap_Techniker_"):
+                const_t = int(row_name.split("_")[-1])
+                rt_sets[(job, mode, start_t)].add(const_t)
+                rt_use[(job, mode)] = max(rt_use[(job, mode)], value)
+
+    durations = defaultdict(int)
+    for key, times in rm_sets.items():
+        job, mode, _ = key
+        durations[(job, mode)] = max(durations[(job, mode)], len(times))
+    for key, times in rt_sets.items():
+        job, mode, _ = key
+        durations[(job, mode)] = max(durations[(job, mode)], len(times))
+
+    capacities = {"Mechaniker": 0.0, "Techniker": 0.0}
+    for line in rhs:
+        tokens = line.split()
+        if len(tokens) < 3:
+            continue
+        pairs = tokens[1:]
+        for i in range(0, len(pairs) - 1, 2):
+            row_name = pairs[i]
+            try:
+                value = float(pairs[i + 1])
+            except ValueError:
+                continue
+            if row_name.startswith("rescap_Mechaniker"):
+                capacities["Mechaniker"] = max(capacities["Mechaniker"], value)
+            elif row_name.startswith("rescap_Techniker"):
+                capacities["Techniker"] = max(capacities["Techniker"], value)
+
+    return {
+        "jobs": sorted(jobs),
+        "edges": sorted(set(edges)),
+        "durations": dict(durations),
+        "mechanic_use": dict(rm_use),
+        "technician_use": dict(rt_use),
+        "capacities": capacities,
+    }
+
+
+def _choose_business_mode(job: int, profile: dict) -> int:
+    """Pick a representative execution mode per job for executive-style visuals."""
+    durations = profile["durations"]
+    mech = profile["mechanic_use"]
+    tech = profile["technician_use"]
+
+    candidate_modes = sorted(
+        {
+            mode
+            for (job_id, mode) in durations.keys()
+            if job_id == job
+        }
+        | {
+            mode
+            for (job_id, mode) in mech.keys()
+            if job_id == job
+        }
+        | {
+            mode
+            for (job_id, mode) in tech.keys()
+            if job_id == job
+        }
+    )
+
+    if not candidate_modes:
+        return 1
+
+    return min(
+        candidate_modes,
+        key=lambda mode: (
+            durations.get((job, mode), 9999),
+            mech.get((job, mode), 9999) + tech.get((job, mode), 9999),
+            mode,
+        ),
+    )
+
+
+def _earliest_start_schedule(profile: dict) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
+    """Compute precedence-feasible earliest starts with one representative mode per job."""
+    jobs = profile["jobs"]
+    edges = profile["edges"]
+
+    selected_mode = {job: _choose_business_mode(job, profile) for job in jobs}
+    duration_by_job = {
+        job: max(1, int(profile["durations"].get((job, selected_mode[job]), 1)))
+        for job in jobs
+    }
+
+    outgoing = defaultdict(list)
+    indegree = {job: 0 for job in jobs}
+    for src, dst in edges:
+        if src in indegree and dst in indegree:
+            outgoing[src].append(dst)
+            indegree[dst] += 1
+
+    queue = deque([job for job in jobs if indegree[job] == 0])
+    topo = []
+    while queue:
+        node = queue.popleft()
+        topo.append(node)
+        for nxt in outgoing[node]:
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                queue.append(nxt)
+
+    if len(topo) != len(jobs):
+        topo = sorted(jobs)
+
+    predecessors = defaultdict(list)
+    for src, dst in edges:
+        predecessors[dst].append(src)
+
+    start_by_job = {job: 0 for job in jobs}
+    for job in topo:
+        if predecessors[job]:
+            start_by_job[job] = max(
+                start_by_job[pred] + duration_by_job[pred]
+                for pred in predecessors[job]
+            )
+
+    return start_by_job, duration_by_job, selected_mode
+
+
+def build_input_graph(input_path: str) -> go.Figure:
+    """Build an executive-style view with timeline and resource loading."""
+    profile = _parse_mps_structure(input_path)
+    jobs = profile["jobs"]
+
+    if not jobs:
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"No graphable data found in {Path(input_path).name if input_path else 'input file'}",
+            template="plotly_white",
+            xaxis={"visible": False},
+            yaxis={"visible": False},
+        )
+        return fig
+
+    start_by_job, duration_by_job, mode_by_job = _earliest_start_schedule(profile)
+    jobs_sorted = sorted(jobs, key=lambda job: (start_by_job[job], job))
+    finish_by_job = {job: start_by_job[job] + duration_by_job[job] for job in jobs}
+    horizon = max(finish_by_job.values()) if finish_by_job else 1
+
+    mech_demand = [0.0] * max(1, horizon)
+    tech_demand = [0.0] * max(1, horizon)
+    for job in jobs:
+        mode = mode_by_job[job]
+        start = start_by_job[job]
+        finish = finish_by_job[job]
+        mech_use = float(profile["mechanic_use"].get((job, mode), 0.0))
+        tech_use = float(profile["technician_use"].get((job, mode), 0.0))
+        for t in range(start, min(finish, len(mech_demand))):
+            mech_demand[t] += mech_use
+            tech_demand[t] += tech_use
+
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.14,
+        subplot_titles=(
+            "Portfolio Timeline (Earliest Feasible Starts)",
+            "Resource Demand vs Capacity",
+        ),
+    )
+
+    fig.add_trace(
+        go.Bar(
+            x=[duration_by_job[job] for job in jobs_sorted],
+            y=[f"Job {job}" for job in jobs_sorted],
+            base=[start_by_job[job] for job in jobs_sorted],
+            orientation="h",
+            marker={"color": "#2d4376"},
+            customdata=[mode_by_job[job] for job in jobs_sorted],
+            hovertemplate=(
+                "<b>%{y}</b><br>Start: %{base}<br>Duration: %{x}<br>"
+                "Mode: %{customdata}<extra></extra>"
+            ),
+            name="Planned Job Window",
+            showlegend=False,
+        ),
+        row=1,
+        col=1,
+    )
+
+    x_axis = list(range(len(mech_demand)))
+    mech_cap = float(profile["capacities"].get("Mechaniker", 0.0))
+    tech_cap = float(profile["capacities"].get("Techniker", 0.0))
+
+    fig.add_trace(
+        go.Scatter(
+            x=x_axis,
+            y=mech_demand,
+            mode="lines",
+            line={"color": "#1f77b4", "width": 2},
+            name="Mechanics Demand",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=x_axis,
+            y=[mech_cap] * len(x_axis),
+            mode="lines",
+            line={"color": "#1f77b4", "width": 1.5, "dash": "dash"},
+            name="Mechanics Capacity",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=x_axis,
+            y=tech_demand,
+            mode="lines",
+            line={"color": "#ff7f0e", "width": 2},
+            name="Technicians Demand",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=x_axis,
+            y=[tech_cap] * len(x_axis),
+            mode="lines",
+            line={"color": "#ff7f0e", "width": 1.5, "dash": "dash"},
+            name="Technicians Capacity",
+        ),
+        row=2,
+        col=1,
+    )
+
+    fig.update_layout(
+        title=f"Plan and Capacity",
+        template="plotly_white",
+        margin={"l": 20, "r": 20, "t": 60, "b": 20},
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        legend={"orientation": "h", "y": 1.03, "x": 0},
+        height=760,
+    )
+    fig.update_xaxes(title_text="Time", row=2, col=1)
+    fig.update_yaxes(title_text="Jobs", row=1, col=1, autorange="reversed")
+    fig.update_yaxes(title_text="Resource Units", row=2, col=1)
+
+    return fig

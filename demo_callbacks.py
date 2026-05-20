@@ -14,13 +14,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import dash
-from dash import html
+from dash import dcc, html
 from dash import MATCH
 from dash.dependencies import Input, Output, State
 
-from demo_configs import INPUTS
 from demo_interface import generate_table
+from src.plot import build_input_graph
 from src.demo_runner import compare_formulations, summarize_runs
 
 
@@ -58,33 +60,23 @@ def toggle_left_column(collapse_trigger: int, to_collapse_class: str) -> tuple[s
 @dash.callback(
     Output("input", "children"),
     inputs=[
-        Input("runs", "value"),
-        Input("solver-selection", "value"),
-        Input("solver-time-limit", "value"),
+        Input("input-file-select", "value"),
     ],
 )
-def render_initial_state(runs: int, selection: list[str], time_limit: float) -> html.Div:
+def render_initial_state(input_file: str) -> html.Div:
     """Runs on load and any time the value of the slider is updated.
         Add `prevent_initial_call=True` to skip on load runs.
 
     Args:
-        runs: Number of repeated runs per formulation.
-        selection: Selected formulation IDs.
-        time_limit: The per-solver time limit.
+        input_file: Selected input file path.
 
     Returns:
         The content of the input tab.
     """
-    selected_count = len(selection or [])
-    return html.Div(
-        [
-            html.H3("Ready To Compare Formulations"),
-            html.P(
-                f"Configured {selected_count} formulation(s), "
-                f"{runs} run(s) each, {time_limit} second time limit per run."
-            ),
-            html.P("Click Run Optimization to generate a summary table and detailed run table."),
-        ]
+    selected_input = input_file or ""
+    return dcc.Graph(
+        figure=build_input_graph(selected_input),
+        config={"displayModeBar": False},
     )
 
 
@@ -100,6 +92,7 @@ def render_initial_state(runs: int, selection: list[str], time_limit: float) -> 
         State("solver-selection", "value"),
         State("solver-time-limit", "value"),
         State("runs", "value"),
+        State("input-file-select", "value"),
     ],
     running=[
         (Output("cancel-button", "style"), {}, {"display": "none"}),  # Show/hide cancel button.
@@ -119,6 +112,7 @@ def run_optimization(
     solver_selection: list[str],
     time_limit: float,
     runs: int,
+    input_file: str,
 ) -> tuple[html.Div, html.Table]:
     """Runs the optimization and updates UI accordingly.
 
@@ -132,6 +126,7 @@ def run_optimization(
         solver_selection: Selected formulations to run.
         time_limit: The solver time limit.
         runs: Number of repeated runs.
+        input_file: Selected input file path.
 
     Returns:
         A tuple containing:
@@ -140,6 +135,7 @@ def run_optimization(
         - list: List of the table rows for the problem details table.
     """
     selection = solver_selection or []
+    selected_input = input_file or ""
     if not selection:
         results = html.Div([html.P("Select at least one formulation before running.")])
         problem_details_table = generate_table(
@@ -151,7 +147,7 @@ def run_optimization(
         )
         return results, problem_details_table
 
-    run_rows = compare_formulations(selection, float(time_limit), int(runs), input_path=INPUTS[0])
+    run_rows = compare_formulations(selection, float(time_limit), int(runs), input_path=selected_input)
     summary_rows = summarize_runs(run_rows)
 
     summary_table = generate_table(
@@ -187,6 +183,7 @@ def run_optimization(
             "Selected Formulations": [len(selection)],
             "Runs Per Formulation": [runs],
             "Time Limit (s)": [time_limit],
+            "Input File": [Path(selected_input).name if selected_input else "n/a"],
         }
     )
 

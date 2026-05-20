@@ -15,12 +15,14 @@
 """This file stores the Dash HTML layout for the app."""
 from __future__ import annotations
 from enum import EnumMeta
+from pathlib import Path
 
 from dash import dcc, html
 import dash_mantine_components as dmc
 
 from demo_configs import (
     DESCRIPTION,
+    INPUTS,
     MAIN_HEADER,
     RUNS,
     SOLVER_TIME,
@@ -88,13 +90,14 @@ def range_slider(label: str, id: str, config: dict) -> html.Div:
     )
 
 
-def dropdown(label: str, id: str, options: list) -> html.Div:
+def dropdown(label: str, id: str, options: list, value: str | None = None) -> html.Div:
     """Dropdown element for option selection.
 
     Args:
         label: The title that goes above the dropdown.
         id: A unique selector for this element.
         options: A list of dictionaries of labels and values.
+        value: Optional selected value.
     """
     return html.Div(
         className="dropdown-wrapper",
@@ -103,7 +106,7 @@ def dropdown(label: str, id: str, options: list) -> html.Div:
             dmc.Select(
                 id=id,
                 data=options,
-                value=options[0]["value"],
+                value=value if value is not None else options[0]["value"],
                 allowDeselect=False,
             ),
         ],
@@ -238,10 +241,27 @@ def generate_settings_form() -> html.Div:
         A Div containing the settings for selecting the scenario, model, and solver.
     """
     solver_options = generate_options(SolverType)
+    input_dir = Path("input")
+    file_options = sorted(
+        [
+            {"label": str(path.name), "value": str(path)}
+            for path in input_dir.glob("*")
+            if path.is_file()
+        ],
+        key=lambda option: option["label"],
+    )
+
+    default_input = INPUTS[0] if INPUTS else (file_options[0]["value"] if file_options else "")
 
     return html.Div(
         className="settings",
         children=[
+            dropdown(
+                "Input File",
+                "input-file-select",
+                file_options or [{"label": default_input, "value": default_input}],
+                value=default_input,
+            ),
             slider(
                 "Runs Per Formulation",
                 "runs",

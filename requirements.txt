@@ -1,6 +1,8 @@
 dash[diskcache]~=4.1
 dash-mantine-components~=2.5
+plotly~=6.0
 dwave-ocean-sdk~=9.3
+numpy~=2.2
 pulp~=3.3
 highspy~=1.14
 PySCIPOpt~=6.2
