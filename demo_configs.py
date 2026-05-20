@@ -22,6 +22,8 @@ DESCRIPTION = """\
 This is a Dash template for new examples. It includes some basic settings, tabs, and styling.
 """
 
+INPUTS = ["input/30n20b8.mps"]
+
 #######################################
 # Sliders, buttons and option entries #
 #######################################
