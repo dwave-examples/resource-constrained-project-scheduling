@@ -22,7 +22,7 @@ from dash import MATCH
 from dash.dependencies import Input, Output, State
 
 from demo_interface import generate_table
-from src.plot import build_input_graph
+from src.plot import build_input_graph, build_solution_graph
 from src.demo_runner import compare_formulations, summarize_runs
 
 
@@ -83,6 +83,9 @@ def render_initial_state(input_file: str) -> html.Div:
 @dash.callback(
     # The Outputs below must align with the return values of the function.
     Output("results", "children"),
+    Output("highs-results", "children"),
+    Output("scip-results", "children"),
+    Output("stride-results", "children"),
     Output("problem-details", "children"),
     background=True,
     inputs=[
@@ -98,6 +101,9 @@ def render_initial_state(input_file: str) -> html.Div:
         (Output("cancel-button", "style"), {}, {"display": "none"}),  # Show/hide cancel button.
         (Output("run-button", "style"), {"display": "none"}, {}),  # Hides run button while running.
         (Output("results-tab", "disabled"), True, False),  # Disables results tab while running.
+        (Output("highs-tab", "disabled"), True, False),
+        (Output("scip-tab", "disabled"), True, False),
+        (Output("stride-tab", "disabled"), True, False),
         (Output("results-tab", "children"), "Loading...", "Results"),
         (Output("tabs", "value"), "input-tab", "input-tab"),  # Switch to input tab while running.
         (Output("run-in-progress", "data"), True, False),  # Can block certain callbacks.
@@ -113,7 +119,7 @@ def run_optimization(
     time_limit: float,
     runs: int,
     input_file: str,
-) -> tuple[html.Div, html.Table]:
+) -> tuple[html.Div, html.Div, html.Div, html.Div, html.Table]:
     """Runs the optimization and updates UI accordingly.
 
     This is the main function which is called when the ``Run Optimization`` button is clicked.
@@ -138,6 +144,7 @@ def run_optimization(
     selected_input = input_file or ""
     if not selection:
         results = html.Div([html.P("Select at least one formulation before running.")])
+        empty_solver = html.Div([html.P("Run optimization to view solver-specific results.")])
         problem_details_table = generate_table(
             {
                 "Selected Formulations": [0],
@@ -145,10 +152,23 @@ def run_optimization(
                 "Time Limit (s)": [time_limit],
             }
         )
-        return results, problem_details_table
+        return results, empty_solver, empty_solver, empty_solver, problem_details_table
 
     run_rows = compare_formulations(selection, float(time_limit), int(runs), input_path=selected_input)
     summary_rows = summarize_runs(run_rows)
+
+    best_run_by_solver = {}
+    for row in run_rows:
+        formulation = row["formulation"]
+        current = best_run_by_solver.get(formulation)
+
+        row_energy = row["energy"] if isinstance(row["energy"], (int, float)) else float("inf")
+        current_energy = (
+            current["energy"] if current and isinstance(current["energy"], (int, float)) else float("inf")
+        )
+
+        if current is None or row_energy < current_energy:
+            best_run_by_solver[formulation] = row
 
     summary_table = generate_table(
         {
@@ -178,6 +198,23 @@ def run_optimization(
         ]
     )
 
+    solver_label_to_output = {
+        "HiGHS (MILP)": html.Div([html.P("No HiGHS solution was returned.")]),
+        "SCIP (MILP)": html.Div([html.P("No SCIP solution was returned.")]),
+        "Stride (NL)": html.Div([html.P("No Stride solution was returned.")]),
+    }
+
+    for formulation, best_run in best_run_by_solver.items():
+        solver_label_to_output[formulation] = dcc.Graph(
+            figure=build_solution_graph(
+                selected_input,
+                best_run.get("starts", {}),
+                best_run.get("modes", {}),
+                title=f"{formulation} Solution View",
+            ),
+            config={"displayModeBar": False},
+        )
+
     problem_details_table = generate_table(
         {
             "Selected Formulations": [len(selection)],
@@ -187,4 +224,10 @@ def run_optimization(
         }
     )
 
-    return results, problem_details_table
+    return (
+        results,
+        solver_label_to_output["HiGHS (MILP)"],
+        solver_label_to_output["SCIP (MILP)"],
+        solver_label_to_output["Stride (NL)"],
+        problem_details_table,
+    )

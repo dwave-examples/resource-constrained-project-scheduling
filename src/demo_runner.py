@@ -47,6 +47,8 @@ def compare_formulations(selection: list[str], time_limit: float, runs: int, inp
                     "status": result["status"],
                     "energy": result["energy"],
                     "ok": result["ok"],
+                    "starts": result.get("starts", {}),
+                    "modes": result.get("modes", {}),
                 }
             )
 

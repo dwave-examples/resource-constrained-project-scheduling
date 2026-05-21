@@ -223,7 +223,7 @@ def create_model(
 
     model.objective = 100*r_mechaniker + 51*r_techniker
 
-    return model
+    return model, starts, modes
 
 
 @lru_cache(maxsize=4)
@@ -246,7 +246,7 @@ def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
     try:
         runtimes_matrix, rm_use_matrix, rt_use_matrix, precedence_pairs = _preprocessed_data(input_path)
 
-        model = create_model(
+        model, starts, modes = create_model(
             LOWER_BOUNDS,
             UPPER_BOUNDS,
             runtimes_matrix,
@@ -259,11 +259,16 @@ def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
         solver = LeapHybridNLSampler()
         solver.sample(model, time_limit=time_limit)
 
+        starts_values = [int(value) for value in starts.state().tolist()]
+        modes_values = [int(value) for value in modes.state().tolist()]
+
         return {
             "solver": "Stride (NL)",
             "status": "Completed",
             "energy": model.objective.state(),
             "ok": all(sym.state() for sym in model.iter_constraints()),
+            "starts": {index + 1: value for index, value in enumerate(starts_values)},
+            "modes": {index + 1: value + 1 for index, value in enumerate(modes_values)},
         }
     except Exception as exc:  # pragma: no cover - runtime/system dependent
         return {
@@ -271,6 +276,8 @@ def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
             "status": f"Error: {exc}",
             "energy": None,
             "ok": False,
+            "starts": {},
+            "modes": {},
         }
 
 

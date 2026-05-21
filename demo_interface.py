@@ -257,18 +257,18 @@ def generate_settings_form() -> html.Div:
         className="settings",
         children=[
             dropdown(
-                "Input File",
+                "Scenario",
                 "input-file-select",
                 file_options or [{"label": default_input, "value": default_input}],
                 value=default_input,
             ),
             slider(
-                "Runs Per Formulation",
+                "Runs Per Solver",
                 "runs",
                 RUNS,
             ),
             checklist(
-                "Formulations To Compare",
+                "Solvers",
                 "solver-selection",
                 sorted(solver_options, key=lambda op: op["value"]),
                 [option["value"] for option in solver_options],
@@ -456,6 +456,24 @@ def create_interface() -> html.Div:
                                                                 id="results-tab",
                                                                 disabled=True,
                                                             ),
+                                                            dmc.TabsTab(
+                                                                "HiGHS",
+                                                                value="highs-tab",
+                                                                id="highs-tab",
+                                                                disabled=True,
+                                                            ),
+                                                            dmc.TabsTab(
+                                                                "SCIP",
+                                                                value="scip-tab",
+                                                                id="scip-tab",
+                                                                disabled=True,
+                                                            ),
+                                                            dmc.TabsTab(
+                                                                "Stride",
+                                                                value="stride-tab",
+                                                                id="stride-tab",
+                                                                disabled=True,
+                                                            ),
                                                         ]
                                                     ),
                                                 ]
@@ -492,11 +510,62 @@ def create_interface() -> html.Div:
                                                         parent_className="results",
                                                         type="circle",
                                                         color=THEME_COLOR,
-                                                        # A Dash callback (in app.py) will generate content in the Div below
+                                                        # A Dash callback will generate content in the Div below
                                                         children=html.Div(id="results"),
                                                     ),
                                                     # Problem details dropdown
                                                     html.Div([html.Hr(), problem_details(1)]),
+                                                ],
+                                            )
+                                        ],
+                                    ),
+                                    dmc.TabsPanel(
+                                        value="highs-tab",
+                                        tabIndex="14",
+                                        children=[
+                                            html.Div(
+                                                className="tab-content-wrapper",
+                                                children=[
+                                                    dcc.Loading(
+                                                        parent_className="results",
+                                                        type="circle",
+                                                        color=THEME_COLOR,
+                                                        children=html.Div(id="highs-results"),
+                                                    ),
+                                                ],
+                                            )
+                                        ],
+                                    ),
+                                    dmc.TabsPanel(
+                                        value="scip-tab",
+                                        tabIndex="15",
+                                        children=[
+                                            html.Div(
+                                                className="tab-content-wrapper",
+                                                children=[
+                                                    dcc.Loading(
+                                                        parent_className="results",
+                                                        type="circle",
+                                                        color=THEME_COLOR,
+                                                        children=html.Div(id="scip-results"),
+                                                    ),
+                                                ],
+                                            )
+                                        ],
+                                    ),
+                                    dmc.TabsPanel(
+                                        value="stride-tab",
+                                        tabIndex="16",
+                                        children=[
+                                            html.Div(
+                                                className="tab-content-wrapper",
+                                                children=[
+                                                    dcc.Loading(
+                                                        parent_className="results",
+                                                        type="circle",
+                                                        color=THEME_COLOR,
+                                                        children=html.Div(id="stride-results"),
+                                                    ),
                                                 ],
                                             )
                                         ],

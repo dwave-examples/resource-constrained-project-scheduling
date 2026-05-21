@@ -352,10 +352,158 @@ def build_input_graph(input_path: str) -> go.Figure:
     fig.update_layout(
         title=f"Plan and Capacity",
         template="plotly_white",
-        margin={"l": 20, "r": 20, "t": 60, "b": 20},
+        margin={"l": 20, "r": 20, "t": 30, "b": 20},
         paper_bgcolor="white",
         plot_bgcolor="white",
-        legend={"orientation": "h", "y": 1.03, "x": 0},
+        # legend={"orientation": "h", "y": 1.03, "x": 0},
+        height=760,
+    )
+    fig.update_xaxes(title_text="Time", row=2, col=1)
+    fig.update_yaxes(title_text="Jobs", row=1, col=1, autorange="reversed")
+    fig.update_yaxes(title_text="Resource Units", row=2, col=1)
+
+    return fig
+
+
+def parse_mps_structure(input_path: str) -> dict:
+    """Public wrapper for parsed MPS structure used by plotting and callbacks."""
+    return _parse_mps_structure(input_path)
+
+
+def build_solution_graph(
+    input_path: str,
+    starts_by_job: dict[int, int] | None,
+    modes_by_job: dict[int, int] | None,
+    title: str,
+) -> go.Figure:
+    """Build timeline and resource graph from a solver-provided schedule.
+
+    If a schedule is unavailable, returns the baseline input graph.
+    """
+    if not starts_by_job or not modes_by_job:
+        fig = build_input_graph(input_path)
+        fig.update_layout(title=f"{title}: Schedule Not Available (Showing Baseline)")
+        return fig
+
+    profile = _parse_mps_structure(input_path)
+    jobs = profile["jobs"]
+    if not jobs:
+        return build_input_graph(input_path)
+
+    fallback_mode = {job: _choose_business_mode(job, profile) for job in jobs}
+    selected_mode = {
+        job: int(modes_by_job.get(job, fallback_mode[job]))
+        for job in jobs
+    }
+    start = {
+        job: int(starts_by_job.get(job, 0))
+        for job in jobs
+    }
+    duration = {
+        job: max(1, int(profile["durations"].get((job, selected_mode[job]), 1)))
+        for job in jobs
+    }
+
+    jobs_sorted = sorted(jobs, key=lambda job_id: (start[job_id], job_id))
+    finish_by_job = {job: start[job] + duration[job] for job in jobs}
+    horizon = max(finish_by_job.values()) if finish_by_job else 1
+
+    mech_demand = [0.0] * max(1, horizon)
+    tech_demand = [0.0] * max(1, horizon)
+    for job in jobs:
+        mode = selected_mode[job]
+        s_t = start[job]
+        f_t = finish_by_job[job]
+        mech_use = float(profile["mechanic_use"].get((job, mode), 0.0))
+        tech_use = float(profile["technician_use"].get((job, mode), 0.0))
+        for t in range(s_t, min(f_t, len(mech_demand))):
+            mech_demand[t] += mech_use
+            tech_demand[t] += tech_use
+
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.14,
+        subplot_titles=(
+            "Solver Timeline",
+            "Resource Demand vs Capacity",
+        ),
+    )
+
+    fig.add_trace(
+        go.Bar(
+            x=[duration[job] for job in jobs_sorted],
+            y=[f"Job {job}" for job in jobs_sorted],
+            base=[start[job] for job in jobs_sorted],
+            orientation="h",
+            marker={"color": "#2d4376"},
+            customdata=[selected_mode[job] for job in jobs_sorted],
+            hovertemplate=(
+                "<b>%{y}</b><br>Start: %{base}<br>Duration: %{x}<br>"
+                "Mode: %{customdata}<extra></extra>"
+            ),
+            showlegend=False,
+        ),
+        row=1,
+        col=1,
+    )
+
+    x_axis = list(range(len(mech_demand)))
+    mech_cap = float(profile["capacities"].get("Mechaniker", 0.0))
+    tech_cap = float(profile["capacities"].get("Techniker", 0.0))
+
+    fig.add_trace(
+        go.Scatter(
+            x=x_axis,
+            y=mech_demand,
+            mode="lines",
+            line={"color": "#1f77b4", "width": 2},
+            name="Mechanics Demand",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=x_axis,
+            y=[mech_cap] * len(x_axis),
+            mode="lines",
+            line={"color": "#1f77b4", "width": 1.5, "dash": "dash"},
+            name="Mechanics Capacity",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=x_axis,
+            y=tech_demand,
+            mode="lines",
+            line={"color": "#ff7f0e", "width": 2},
+            name="Technicians Demand",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=x_axis,
+            y=[tech_cap] * len(x_axis),
+            mode="lines",
+            line={"color": "#ff7f0e", "width": 1.5, "dash": "dash"},
+            name="Technicians Capacity",
+        ),
+        row=2,
+        col=1,
+    )
+
+    fig.update_layout(
+        title=title,
+        template="plotly_white",
+        margin={"l": 20, "r": 20, "t": 40, "b": 20},
+        paper_bgcolor="white",
+        plot_bgcolor="white",
         height=760,
     )
     fig.update_xaxes(title_text="Time", row=2, col=1)

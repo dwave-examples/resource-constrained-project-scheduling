@@ -15,12 +15,54 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 try:
     import highspy as hs
 except Exception:  # pragma: no cover - optional dependency
     hs = None
+
+
+def _extract_assignment_highs(highs_model: Any) -> tuple[dict[int, int], dict[int, int]]:
+    """Extract selected x_(job,mode,start) assignments from a HiGHS solution."""
+    names = []
+    values = []
+
+    try:
+        lp = highs_model.getLp()
+        names = list(getattr(lp, "col_names", []))
+    except Exception:
+        names = []
+
+    try:
+        values = list(highs_model.allVariableValues())
+    except Exception:
+        try:
+            sol = highs_model.getSolution()
+            values = list(getattr(sol, "col_value", []))
+        except Exception:
+            values = []
+
+    if not names or not values:
+        return {}, {}
+
+    pattern = re.compile(r"x_(\d+)_(\d+)_(\d+)")
+    best_choice: dict[int, tuple[float, int, int]] = {}
+
+    for name, value in zip(names, values):
+        match = pattern.fullmatch(name)
+        if not match:
+            continue
+        job = int(match.group(1))
+        mode = int(match.group(2))
+        start = int(match.group(3))
+        if job not in best_choice or float(value) > best_choice[job][0]:
+            best_choice[job] = (float(value), mode, start)
+
+    starts = {job: choice[2] for job, choice in best_choice.items() if choice[0] > 0.5}
+    modes = {job: choice[1] for job, choice in best_choice.items() if choice[0] > 0.5}
+    return starts, modes
 
 
 def solve_highs(time_limit: float, input_path: str) -> dict[str, Any]:
@@ -42,13 +84,15 @@ def solve_highs(time_limit: float, input_path: str) -> dict[str, Any]:
 
         info = h.getInfo()
         status_str = h.getModelStatus()
-        print(status_str)
+        starts, modes = _extract_assignment_highs(h)
 
         return {
             "solver": "HiGHS (MILP)",
             "status": str(status_str),
             "energy": info.objective_function_value,
             "ok": True,
+            "starts": starts,
+            "modes": modes,
         }
     except Exception as exc:  # pragma: no cover - runtime/system dependent
         return {
@@ -56,6 +100,8 @@ def solve_highs(time_limit: float, input_path: str) -> dict[str, Any]:
             "status": f"Error: {exc}",
             "energy": None,
             "ok": False,
+            "starts": {},
+            "modes": {},
         }
 
 
