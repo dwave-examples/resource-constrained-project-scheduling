@@ -457,7 +457,7 @@ def run_stride(
         [str(SolverType.STRIDE.value)], float(time_limit), int(runs), input_path=selected_input
     )
     return RunStrideReturn(
-        stride_results=_solver_panel("Stride (NL)", rows, selected_input),
+        stride_results=_solver_panel("Stride Quantum Hybrid", rows, selected_input),
         stride_store={"run_click": run_click, "rows": rows},
         stride_tab_label="Stride",
         stride_tab_disabled=False,

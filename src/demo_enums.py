@@ -27,7 +27,7 @@ class SolverType(Enum):
         return {
             SolverType.HIGHS: "HiGHS (MILP)",
             SolverType.SCIP: "SCIP (MILP)",
-            SolverType.STRIDE: "Stride (NL)",
+            SolverType.STRIDE: "Stride Quantum Hybrid",
         }[self]
 
 

@@ -237,7 +237,7 @@ def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
     """Run the Stride nonlinear formulation once and return comparable result metadata."""
     if LeapHybridNLSampler is None:
         return {
-            "solver": "Stride (NL)",
+            "solver": "Stride",
             "status": "Unavailable: dwave optimization packages not installed",
             "energy": None,
             "ok": False,
@@ -263,7 +263,7 @@ def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
         modes_values = [int(value) for value in modes.state().tolist()]
 
         return {
-            "solver": "Stride (NL)",
+            "solver": "Stride",
             "status": "Completed",
             "energy": float(np.asarray(model.objective.state()).flat[0]),
             "ok": all(sym.state() for sym in model.iter_constraints()),
@@ -272,7 +272,7 @@ def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
         }
     except Exception as exc:  # pragma: no cover - runtime/system dependent
         return {
-            "solver": "Stride (NL)",
+            "solver": "Stride",
             "status": f"Error: {exc}",
             "energy": None,
             "ok": False,

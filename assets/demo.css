@@ -66,6 +66,36 @@ custom CSS can be added below.
     align-items: center;
 }
 
+.placeholder-text {
+    color: var(--grey-medium);
+    font-style: italic;
+    padding: 1rem 0;
+    font-weight: 500;
+}
+
+.results-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+}
+
+.results-layout__graph {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.results-layout__table {
+    flex: 0 0 auto;
+}
+
+.row-highlight-best {
+    background-color: rgba(23, 190, 187, 0.42);
+}
+
+.row-highlight-fail {
+    background-color: rgba(245, 118, 119, 0.36);
+}
+
 .dash-graph {
     width: 100%;
 }

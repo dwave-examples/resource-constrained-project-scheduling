@@ -308,9 +308,9 @@ def solver_solution_panel(has_solution: bool, figure) -> dcc.Graph | html.P:
     """Return a graph of the solver's best solution, or a 'no solution' message."""
     if has_solution:
         return dcc.Graph(figure=figure, config={"displayModeBar": False}, responsive=True)
-    return html.P(
+    return html.H2(
         "No solution found within the given time limit.",
-        style={"color": "#888", "fontStyle": "italic", "padding": "1rem 0"},
+        className="placeholder-text",
     )
 
 
@@ -319,12 +319,12 @@ def waiting_panel() -> html.Div:
     return html.Div([html.P("Waiting for solvers to finish...")])
 
 
-def comparison_panel(figure) -> dcc.Graph | html.P:
+def comparison_panel(figure) -> dcc.Graph | html.H4:
     """Wrap the comparison Plotly figure in a dcc.Graph, or show a fallback message."""
     if figure is None:
-        return html.P(
+        return html.H4(
             "No solutions found to compare.",
-            style={"color": "#888", "fontStyle": "italic"},
+            className="placeholder-text",
         )
     return dcc.Graph(figure=figure, config={"displayModeBar": False}, responsive=True)
 
@@ -347,12 +347,12 @@ def comparison_summary_table(
             return f"{s} (optimal)"
         return s
 
-    def row_bg(row: dict) -> dict:
+    def row_class(row: dict) -> str:
         if row["ok_runs"] == 0:
-            return {"backgroundColor": "rgb(245 118 119 / 36%)"}
+            return "row-highlight-fail"
         if min_energy is not None and row["best_energy"] == min_energy:
-            return {"backgroundColor": "rgb(23 190 187 / 42%)"}
-        return {}
+            return "row-highlight-best"
+        return ""
 
     headers = ["Formulation", "Runs", "OK Runs", "Best Energy", "Avg Energy"]
     return html.Table(
@@ -361,7 +361,7 @@ def comparison_summary_table(
             html.Thead(html.Tr([html.Th(h) for h in headers])),
             html.Tbody([
                 html.Tr(
-                    style=row_bg(row),
+                    className=row_class(row),
                     children=[
                         html.Td(str(row["formulation"])),
                         html.Td(str(row["runs"])),
@@ -379,14 +379,14 @@ def comparison_summary_table(
 def results_layout(comparison_element, summary_table: html.Table) -> html.Div:
     """Results tab content: comparison graph on the left, summary table on the right."""
     return html.Div(
-        style={"display": "flex", "gap": "2rem", "alignItems": "flex-start"},
+        className="results-layout",
         children=[
             html.Div(
-                style={"flex": "1 1 0", "minWidth": 0},
+                className="results-layout__graph",
                 children=comparison_element,
             ),
             html.Div(
-                style={"flex": "0 0 auto"},
+                className="results-layout__table",
                 children=[
                     html.H3("Comparison Summary"),
                     summary_table,
