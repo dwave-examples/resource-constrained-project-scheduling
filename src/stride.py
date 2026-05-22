@@ -55,7 +55,7 @@ def create_runtime_use_matrices(input_path: str) -> tuple[np.ndarray, np.ndarray
     """
     _, problem = pulp.LpProblem.fromMPS(input_path)
 
-    data = problem.to_dict()
+    data = problem.toDict()
 
     rm = {(j,m,t): [] for j in range(1,31) for m in range(1,4) for t in range(213)}
     rt = {(j,m,t): [] for j in range(1,31) for m in range(1,4) for t in range(213)}
@@ -146,7 +146,7 @@ def create_precedence_pairs(input_path: str) -> list[tuple[int, int]]:
         every precedence constraint in the model.
     """
     _, problem = pulp.LpProblem.fromMPS(input_path)
-    data = problem.to_dict()
+    data = problem.toDict()
 
     precedence_pairs = []
 
