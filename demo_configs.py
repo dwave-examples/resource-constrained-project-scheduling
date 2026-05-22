@@ -1,4 +1,4 @@
-# Copyright 2024 D-Wave
+# Copyright 2026 D-Wave
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ INPUTS = ["input/30n20b8.mps"]
 
 # Known optimal objective values keyed by input file path.
 # Add an entry here whenever a new instance with a known optimal is added to INPUTS.
-KNOWN_OPTIMA: dict[str, int | float] = {
+KNOWN_OPTIMA = {
     "input/30n20b8.mps": 302,
 }
 

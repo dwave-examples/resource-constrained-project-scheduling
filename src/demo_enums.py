@@ -1,4 +1,4 @@
-# Copyright 2024 D-Wave
+# Copyright 2026 D-Wave
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,7 +29,3 @@ class SolverType(Enum):
             SolverType.SCIP: "SCIP (MILP)",
             SolverType.STRIDE: "Stride Quantum Hybrid",
         }[self]
-
-
-### If any settings or variables are being used repeatedly, throughout the code, create a new
-### Enum for the setting here to avoid string comparisons or other fragile code practices.

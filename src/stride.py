@@ -21,19 +21,10 @@ from typing import Any
 import numpy as np
 import pulp
 
-try:
-    import dwave.optimization
-    from dwave.optimization import Model, put, symbols
-    from dwave.optimization.mathematical import argsort, concatenate
-    from dwave.system import LeapHybridNLSampler
-except Exception:  # pragma: no cover - optional dependency
-    dwave = None
-    Model = None
-    put = None
-    symbols = None
-    concatenate = None
-    argsort = None
-    LeapHybridNLSampler = None
+import dwave.optimization
+from dwave.optimization import Model, put, symbols
+from dwave.optimization.mathematical import argsort, concatenate
+from dwave.system import LeapHybridNLSampler
 
 
 LOWER_BOUNDS = [
@@ -279,12 +270,3 @@ def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
             "starts": {},
             "modes": {},
         }
-
-
-if __name__ == "__main__":
-    import pandas as pd
-
-    rows = []
-    for limit in [5, 10]:
-        rows.append({"time": limit, **solve_stride(limit, input_path="input/30n20b8.mps")})
-    pd.DataFrame(rows).to_csv("nl_rcpsp.csv", index=False)

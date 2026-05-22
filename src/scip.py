@@ -18,10 +18,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-try:
-    from pyscipopt import Model
-except Exception:  # pragma: no cover - optional dependency
-    Model = None
+from pyscipopt import Model
+
 
 
 def _extract_assignment_scip(model: Any) -> tuple[dict[int, int], dict[int, int]]:
@@ -86,17 +84,3 @@ def solve_scip(time_limit: float, input_path: str) -> dict[str, Any]:
             "starts": {},
             "modes": {},
         }
-
-
-if __name__ == "__main__":
-    import pandas as pd
-
-    time_limits = [5, 10]
-    rows = []
-
-    for time in time_limits:
-        for _ in range(5):
-            result = solve_scip(time, input_path="input/30n20b8.mps")
-            rows.append({"time": time, **result})
-
-    pd.DataFrame(rows).to_csv("scip_rcpsp.csv", index=False)
