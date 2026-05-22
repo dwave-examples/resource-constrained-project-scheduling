@@ -31,7 +31,7 @@ def _extract_assignment_highs(highs_model: Any) -> tuple[dict[int, int], dict[in
 
     try:
         lp = highs_model.getLp()
-        names = list(getattr(lp, "col_names", []))
+        names = list(lp.col_names_)
     except Exception:
         names = []
 
@@ -86,13 +86,16 @@ def solve_highs(time_limit: float, input_path: str) -> dict[str, Any]:
         status_str = h.getModelStatus()
         starts, modes = _extract_assignment_highs(h)
 
+        import math
+        obj = info.objective_function_value
+        feasible = math.isfinite(obj)
         return {
             "solver": "HiGHS (MILP)",
             "status": str(status_str),
-            "energy": info.objective_function_value,
-            "ok": True,
-            "starts": starts,
-            "modes": modes,
+            "energy": obj if feasible else None,
+            "ok": feasible,
+            "starts": starts if feasible else {},
+            "modes": modes if feasible else {},
         }
     except Exception as exc:  # pragma: no cover - runtime/system dependent
         return {
