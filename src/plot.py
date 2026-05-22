@@ -277,7 +277,7 @@ def build_input_graph(input_path: str) -> go.Figure:
         vertical_spacing=0.14,
         subplot_titles=(
             "Portfolio Timeline (Earliest Feasible Starts)",
-            "Resource Demand vs Capacity",
+            "Resource Demand",
         ),
     )
 
@@ -301,8 +301,6 @@ def build_input_graph(input_path: str) -> go.Figure:
     )
 
     x_axis = list(range(len(mech_demand)))
-    mech_cap = float(profile["capacities"].get("Mechaniker", 0.0))
-    tech_cap = float(profile["capacities"].get("Techniker", 0.0))
 
     fig.add_trace(
         go.Scatter(
@@ -310,18 +308,7 @@ def build_input_graph(input_path: str) -> go.Figure:
             y=mech_demand,
             mode="lines",
             line={"color": "#1f77b4", "width": 2},
-            name="Mechanics Demand",
-        ),
-        row=2,
-        col=1,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=x_axis,
-            y=[mech_cap] * len(x_axis),
-            mode="lines",
-            line={"color": "#1f77b4", "width": 1.5, "dash": "dash"},
-            name="Mechanics Capacity",
+            name="Mechanics",
         ),
         row=2,
         col=1,
@@ -332,25 +319,14 @@ def build_input_graph(input_path: str) -> go.Figure:
             y=tech_demand,
             mode="lines",
             line={"color": "#ff7f0e", "width": 2},
-            name="Technicians Demand",
-        ),
-        row=2,
-        col=1,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=x_axis,
-            y=[tech_cap] * len(x_axis),
-            mode="lines",
-            line={"color": "#ff7f0e", "width": 1.5, "dash": "dash"},
-            name="Technicians Capacity",
+            name="Technicians",
         ),
         row=2,
         col=1,
     )
 
     fig.update_layout(
-        title=f"Plan and Capacity",
+        title="Plan",
         template="plotly_white",
         margin={"l": 20, "r": 20, "t": 30, "b": 20},
         paper_bgcolor="white",
@@ -427,7 +403,7 @@ def build_solution_graph(
         vertical_spacing=0.14,
         subplot_titles=(
             "Solver Timeline",
-            "Resource Demand vs Capacity",
+            "Resource Demand",
         ),
     )
 
@@ -450,8 +426,6 @@ def build_solution_graph(
     )
 
     x_axis = list(range(len(mech_demand)))
-    mech_cap = float(profile["capacities"].get("Mechaniker", 0.0))
-    tech_cap = float(profile["capacities"].get("Techniker", 0.0))
 
     fig.add_trace(
         go.Scatter(
@@ -459,18 +433,7 @@ def build_solution_graph(
             y=mech_demand,
             mode="lines",
             line={"color": "#1f77b4", "width": 2},
-            name="Mechanics Demand",
-        ),
-        row=2,
-        col=1,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=x_axis,
-            y=[mech_cap] * len(x_axis),
-            mode="lines",
-            line={"color": "#1f77b4", "width": 1.5, "dash": "dash"},
-            name="Mechanics Capacity",
+            name="Mechanics",
         ),
         row=2,
         col=1,
@@ -481,18 +444,7 @@ def build_solution_graph(
             y=tech_demand,
             mode="lines",
             line={"color": "#ff7f0e", "width": 2},
-            name="Technicians Demand",
-        ),
-        row=2,
-        col=1,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=x_axis,
-            y=[tech_cap] * len(x_axis),
-            mode="lines",
-            line={"color": "#ff7f0e", "width": 1.5, "dash": "dash"},
-            name="Technicians Capacity",
+            name="Technicians",
         ),
         row=2,
         col=1,

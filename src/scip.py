@@ -67,14 +67,15 @@ def solve_scip(time_limit: float, input_path: str) -> dict[str, Any]:
         model.hideOutput()
         model.optimize()
         starts, modes = _extract_assignment_scip(model)
+        feasible = model.getNSols() > 0
 
         return {
             "solver": "SCIP (MILP)",
             "status": model.getStatus(),
-            "energy": model.getPrimalbound(),
-            "ok": True,
-            "starts": starts,
-            "modes": modes,
+            "energy": model.getPrimalbound() if feasible else None,
+            "ok": feasible,
+            "starts": starts if feasible else {},
+            "modes": modes if feasible else {},
         }
     except Exception as exc:  # pragma: no cover - runtime/system dependent
         return {

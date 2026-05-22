@@ -265,7 +265,7 @@ def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
         return {
             "solver": "Stride (NL)",
             "status": "Completed",
-            "energy": model.objective.state(),
+            "energy": float(np.asarray(model.objective.state()).flat[0]),
             "ok": all(sym.state() for sym in model.iter_constraints()),
             "starts": {index + 1: value for index, value in enumerate(starts_values)},
             "modes": {index + 1: value + 1 for index, value in enumerate(modes_values)},

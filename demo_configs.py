@@ -25,6 +25,12 @@ HiGHS MILP, SCIP MILP, and D-Wave Stride NL.
 
 INPUTS = ["input/30n20b8.mps"]
 
+# Known optimal objective values keyed by input file path.
+# Add an entry here whenever a new instance with a known optimal is added to INPUTS.
+KNOWN_OPTIMA: dict[str, int | float] = {
+    "input/30n20b8.mps": 302,
+}
+
 #######################################
 # Sliders, buttons and option entries #
 #######################################

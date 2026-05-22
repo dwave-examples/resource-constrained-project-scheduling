@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import NamedTuple
 
 import dash
@@ -23,6 +22,7 @@ from dash import MATCH
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 
+from demo_configs import KNOWN_OPTIMA
 from demo_interface import generate_table
 from src.demo_enums import SolverType
 from src.plot import build_input_graph, build_solution_graph
@@ -95,12 +95,15 @@ def render_initial_state(input_file: str) -> html.Div:
     Output("running-highs", "data"),
     Output("highs-tab", "children"),
     Output("highs-tab", "disabled"),
+    Output("highs-tab", "className"),
     Output("running-scip", "data"),
     Output("scip-tab", "children"),
     Output("scip-tab", "disabled"),
+    Output("scip-tab", "className"),
     Output("running-stride", "data"),
     Output("stride-tab", "children"),
     Output("stride-tab", "disabled"),
+    Output("stride-tab", "className"),
     Output("run-button", "style"),
     Output("cancel-button", "style"),
     Output("tabs", "value"),
@@ -138,10 +141,13 @@ def update_run_state(
             *(loading if highs_selected or scip_selected or stride_selected else ("Results", True)),
             highs_selected,
             *(loading if highs_selected else ("HiGHS", True)),
+            "",  # reset highs className
             scip_selected,
             *(loading if scip_selected else ("SCIP", True)),
+            "",  # reset scip className
             stride_selected,
             *(loading if stride_selected else ("Stride", True)),
+            "",  # reset stride className
             {"display": "none"},  # hide run button
             {},                   # show cancel button
             "input-tab",
@@ -151,11 +157,11 @@ def update_run_state(
         return (
             "Results", False,
             False,
-            "HiGHS", False,
+            "HiGHS", False, "",
             False,
-            "SCIP", False,
+            "SCIP", False, "",
             False,
-            "Stride", False,
+            "Stride", False, "",
             {},                   # show run button
             {"display": "none"},  # hide cancel button
             dash.no_update,
@@ -223,28 +229,29 @@ def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
         rows,
         key=lambda row: row["energy"] if isinstance(row.get("energy"), (int, float)) else float("inf"),
     )
-    return html.Div(
-        [
-            dcc.Graph(
-                figure=build_solution_graph(
-                    input_path,
-                    best.get("starts", {}),
-                    best.get("modes", {}),
-                    title=f"{label} Best Solution View",
-                ),
-                config={"displayModeBar": False},
+    has_solution = bool(best.get("starts")) and bool(best.get("modes"))
+    graph_section = (
+        dcc.Graph(
+            figure=build_solution_graph(
+                input_path,
+                best.get("starts", {}),
+                best.get("modes", {}),
+                title=f"{label} Best Solution View",
             ),
-            html.H4("Run Details"),
-            generate_table(
-                {
-                    "Run":    [row["run"]    for row in rows],
-                    "Status": [row["status"] for row in rows],
-                    "Energy": [row["energy"] if row["energy"] is not None else "n/a" for row in rows],
-                    "OK":     ["yes" if row["ok"] else "no" for row in rows],
-                }
-            ),
-        ]
+            config={"displayModeBar": False},
+        )
+        if has_solution
+        else html.P(
+            "No solution found within the given time limit.",
+            style={"color": "#888", "fontStyle": "italic", "padding": "1rem 0"},
+        )
     )
+    return html.Div([graph_section])
+
+
+def _solver_tab_class(rows: list[dict]) -> str:
+    """Return the CSS class for a solver tab based on whether any run succeeded."""
+    return "tab-success" if any(row.get("ok") for row in rows) else "tab-fail"
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +266,7 @@ class RunHiGHSReturn(NamedTuple):
     highs_tab_label: str         = dash.no_update
     highs_tab_disabled: bool     = dash.no_update
     running_highs: bool          = dash.no_update
+    highs_tab_class: str         = dash.no_update
 
 
 @dash.callback(
@@ -267,6 +275,7 @@ class RunHiGHSReturn(NamedTuple):
     Output("highs-tab", "children", allow_duplicate=True),
     Output("highs-tab", "disabled", allow_duplicate=True),
     Output("running-highs", "data", allow_duplicate=True),
+    Output("highs-tab", "className", allow_duplicate=True),
     background=True,
     inputs=[
         Input("run-button", "n_clicks"),
@@ -316,6 +325,7 @@ def run_highs(
         highs_tab_label="HiGHS",
         highs_tab_disabled=False,
         running_highs=False,
+        highs_tab_class=_solver_tab_class(rows),
     )
 
 
@@ -326,6 +336,7 @@ class RunSCIPReturn(NamedTuple):
     scip_tab_label: str          = dash.no_update
     scip_tab_disabled: bool      = dash.no_update
     running_scip: bool           = dash.no_update
+    scip_tab_class: str          = dash.no_update
 
 
 @dash.callback(
@@ -334,6 +345,7 @@ class RunSCIPReturn(NamedTuple):
     Output("scip-tab", "children", allow_duplicate=True),
     Output("scip-tab", "disabled", allow_duplicate=True),
     Output("running-scip", "data", allow_duplicate=True),
+    Output("scip-tab", "className", allow_duplicate=True),
     background=True,
     inputs=[
         Input("run-button", "n_clicks"),
@@ -383,6 +395,7 @@ def run_scip(
         scip_tab_label="SCIP",
         scip_tab_disabled=False,
         running_scip=False,
+        scip_tab_class=_solver_tab_class(rows),
     )
 
 
@@ -393,6 +406,7 @@ class RunStrideReturn(NamedTuple):
     stride_tab_label: str        = dash.no_update
     stride_tab_disabled: bool    = dash.no_update
     running_stride: bool         = dash.no_update
+    stride_tab_class: str        = dash.no_update
 
 
 @dash.callback(
@@ -401,6 +415,7 @@ class RunStrideReturn(NamedTuple):
     Output("stride-tab", "children", allow_duplicate=True),
     Output("stride-tab", "disabled", allow_duplicate=True),
     Output("running-stride", "data", allow_duplicate=True),
+    Output("stride-tab", "className", allow_duplicate=True),
     background=True,
     inputs=[
         Input("run-button", "n_clicks"),
@@ -450,6 +465,7 @@ def run_stride(
         stride_tab_label="Stride",
         stride_tab_disabled=False,
         running_stride=False,
+        stride_tab_class=_solver_tab_class(rows),
     )
 
 
@@ -462,15 +478,12 @@ def run_stride(
     Output("results", "children"),
     Output("results-tab", "disabled", allow_duplicate=True),
     Output("results-tab", "children", allow_duplicate=True),
-    Output("problem-details", "children"),
     inputs=[
         Input("highs-store", "data"),
         Input("scip-store", "data"),
         Input("stride-store", "data"),
         State("run-button", "n_clicks"),
         State("solver-selection", "value"),
-        State("solver-time-limit", "value"),
-        State("runs", "value"),
         State("input-file-select", "value"),
     ],
     prevent_initial_call=True,
@@ -481,10 +494,8 @@ def render_aggregate_results(
     stride_store: dict,
     run_click: int,
     solver_selection: list[str],
-    time_limit: float,
-    runs: int,
     input_file: str,
-) -> tuple[html.Div, bool, str, html.Table]:
+) -> tuple[html.Div, bool, str]:
     """Build the Results summary tab from completed solver stores.
 
     Fires each time any solver store updates, so the summary grows as
@@ -496,8 +507,6 @@ def render_aggregate_results(
         stride_store: Latest data stored by the Stride callback.
         run_click: Number of times the run button has been clicked.
         solver_selection: Currently selected solver values.
-        time_limit: Solver time limit in seconds.
-        runs: Number of repeated runs.
         input_file: Path to the selected input file.
 
     Returns:
@@ -505,7 +514,7 @@ def render_aggregate_results(
 
         - html.Div: Summary and run-detail tables for all finished solvers.
         - bool: Whether the Results tab should remain disabled.
-        - html.Table: Problem details table.
+        - str: Results tab label.
     """
     selection = solver_selection or []
     selected_input = input_file or ""
@@ -515,24 +524,24 @@ def render_aggregate_results(
         if store.get("run_click") == run_click:
             rows.extend(store.get("rows", []))
 
-    problem_details_table = generate_table(
-        {
-            "Selected Formulations": [len(selection)],
-            "Runs Per Formulation":  [runs],
-            "Time Limit (s)":        [time_limit],
-            "Input File":            [Path(selected_input).name if selected_input else "n/a"],
-        }
-    )
-
     if not rows:
         return (
             html.Div([html.P("Waiting for solvers to finish...")]),
             True,
             "Results",
-            problem_details_table,
         )
 
     summary_rows = summarize_runs(rows)
+    known_optimal = KNOWN_OPTIMA.get(selected_input)
+
+    def fmt_best_energy(val: object) -> str:
+        if val is None:
+            return "n/a"
+        s = str(val)
+        if known_optimal is not None and val == known_optimal:
+            return f"{s} (optimal)"
+        return s
+
     results = html.Div(
         [
             html.H3("Comparison Summary"),
@@ -541,21 +550,11 @@ def render_aggregate_results(
                     "Formulation": [str(row["formulation"]) for row in summary_rows],
                     "Runs":        [str(row["runs"])        for row in summary_rows],
                     "OK Runs":     [str(row["ok_runs"])     for row in summary_rows],
-                    "Best Energy": [str(row["best_energy"]) for row in summary_rows],
+                    "Best Energy": [fmt_best_energy(row["best_energy"]) for row in summary_rows],
                     "Avg Energy":  [str(row["avg_energy"])  for row in summary_rows],
-                }
-            ),
-            html.H3("Run-Level Details"),
-            generate_table(
-                {
-                    "Formulation": [str(row["formulation"]) for row in rows],
-                    "Run":         [str(row["run"])         for row in rows],
-                    "Status":      [str(row["status"])      for row in rows],
-                    "Energy":      [str(row["energy"]) if row["energy"] is not None else "n/a" for row in rows],
-                    "OK":          ["yes" if row["ok"] else "no" for row in rows],
                 }
             ),
         ]
     )
 
-    return results, False, "Results", problem_details_table
+    return results, False, "Results"

@@ -35,10 +35,19 @@ custom CSS can be added below.
     height: 100%;
 }
 
-.problem-details-table {
-    width: 15.5rem;
-}
-
   /****************************/
  /*** CUSTOM CSS GOES HERE ***/
 /****************************/
+
+.tab-fail:where(:not([data-active])),
+.mantine-Tabs-tab:hover:where(:not([data-active])).tab-fail {
+    border-top-color: var(--red-light);
+    border-style: solid;
+}
+
+.tab-success:where(:not([data-active])),
+.mantine-Tabs-tab:hover:where(:not([data-active])).tab-success {
+    border-top-color: var(--teal-darker);
+    border-style: solid;
+}
+

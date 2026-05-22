@@ -519,8 +519,6 @@ def create_interface() -> html.Div:
                                                         # A Dash callback will generate content in the Div below
                                                         children=html.Div(id="results"),
                                                     ),
-                                                    # Problem details dropdown
-                                                    html.Div([html.Hr(), problem_details(1)]),
                                                 ],
                                             )
                                         ],
