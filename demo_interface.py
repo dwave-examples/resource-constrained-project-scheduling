@@ -374,6 +374,12 @@ def create_interface() -> html.Div:
             ),
             # Below are any temporary storage items, e.g., for sharing data between callbacks.
             dcc.Store(id="run-in-progress", data=False),  # Indicates whether run is in progress
+            dcc.Store(id="running-highs", data=False),
+            dcc.Store(id="running-scip", data=False),
+            dcc.Store(id="running-stride", data=False),
+            dcc.Store(id="highs-store", data={}),
+            dcc.Store(id="scip-store", data={}),
+            dcc.Store(id="stride-store", data={}),
             # Settings and results columns
             html.Main(
                 className="columns-main",
