@@ -21,8 +21,18 @@ from pathlib import Path
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# Colors for each execution mode (1=slow/lean → 3=fast/resource-heavy)
-_MODE_COLORS = {1: "#2A7DE1", 2: "#17BEBB", 3: "#E83E8C"}
+# Colors keyed by (resource_type, mode): shade encodes mode speed within each resource family
+_JOB_COLORS: dict[tuple[str, int], str] = {
+    ("mechanic",    1): "#9BC2F1",
+    ("mechanic",    2): "#3886E3",
+    ("mechanic",    3): "#1757A5",
+    ("technician",  1): "#F8AF7B",
+    ("technician",  2): "#EF6B0D",
+    ("technician",  3): "#A64A09",
+}
+# Mid-shade of each family used for the resource demand lines
+_MECHANIC_LINE_COLOR = "#3886E3"
+_TECHNICIAN_LINE_COLOR = "#EF6B0D"
 
 def _parse_mps_structure(input_path: str) -> dict:
     """Parse MPS sections to extract precedence, resource usage, and capacities."""
@@ -283,8 +293,15 @@ def build_input_graph(input_path: str) -> go.Figure:
         ),
     )
 
-    for mode_val, color in _MODE_COLORS.items():
-        mode_jobs = [job for job in jobs_sorted if mode_by_job[job] == mode_val]
+    for (res_type, mode_val), color in _JOB_COLORS.items():
+        mode_jobs = [
+            job for job in jobs_sorted
+            if mode_by_job[job] == mode_val
+            and (
+                (res_type == "mechanic"    and profile["mechanic_use"].get((job, mode_val), 0) > 0)
+                or (res_type == "technician" and profile["technician_use"].get((job, mode_val), 0) > 0)
+            )
+        ]
         if not mode_jobs:
             continue
         fig.add_trace(
@@ -309,8 +326,9 @@ def build_input_graph(input_path: str) -> go.Figure:
                     "Mechanics: %{customdata[1]}<br>"
                     "Technicians: %{customdata[2]}<extra></extra>"
                 ),
-                name=f"Mode {mode_val}",
-                legendgroup=f"mode{mode_val}",
+                name=f"{res_type.capitalize()} – Mode {mode_val}",
+                legendgroup=res_type,
+                legendgrouptitle_text=res_type.capitalize() if mode_val == 1 else None,
                 showlegend=True,
             ),
             row=1,
@@ -324,8 +342,9 @@ def build_input_graph(input_path: str) -> go.Figure:
             x=x_axis,
             y=mech_demand,
             mode="lines",
-            line={"color": "#1f77b4", "width": 2},
+            line={"color": _MECHANIC_LINE_COLOR, "width": 2},
             name="Mechanics",
+            legendgroup="mechanic",
         ),
         row=2,
         col=1,
@@ -335,8 +354,9 @@ def build_input_graph(input_path: str) -> go.Figure:
             x=x_axis,
             y=tech_demand,
             mode="lines",
-            line={"color": "#ff7f0e", "width": 2},
+            line={"color": _TECHNICIAN_LINE_COLOR, "width": 2},
             name="Technicians",
+            legendgroup="technician",
         ),
         row=2,
         col=1,
@@ -367,6 +387,105 @@ def build_input_graph(input_path: str) -> go.Figure:
 def parse_mps_structure(input_path: str) -> dict:
     """Public wrapper for parsed MPS structure used by plotting and callbacks."""
     return _parse_mps_structure(input_path)
+
+
+def _compute_demand(
+    profile: dict,
+    starts_by_job: dict[int, int],
+    modes_by_job: dict[int, int],
+) -> tuple[list[float], list[float], int]:
+    """Compute per-timestep mechanic and technician demand arrays from a schedule."""
+    jobs = profile["jobs"]
+    fallback = {job: _choose_business_mode(job, profile) for job in jobs}
+    sel_mode = {job: int(modes_by_job.get(job, fallback[job])) for job in jobs}
+    start = {job: int(starts_by_job.get(job, 0)) for job in jobs}
+    dur = {job: max(1, int(profile["durations"].get((job, sel_mode[job]), 1))) for job in jobs}
+    finish = {job: start[job] + dur[job] for job in jobs}
+    horizon = max(finish.values()) if finish else 1
+
+    mech = [0.0] * max(1, horizon)
+    tech = [0.0] * max(1, horizon)
+    for job in jobs:
+        m = sel_mode[job]
+        for t in range(start[job], min(finish[job], len(mech))):
+            mech[t] += float(profile["mechanic_use"].get((job, m), 0.0))
+            tech[t] += float(profile["technician_use"].get((job, m), 0.0))
+    return mech, tech, horizon
+
+
+# Colors used for each solver in the comparison chart
+_SOLVER_COLORS = {
+    "HiGHS":  "#2d4376",
+    "SCIP":   "#E83E8C",
+    "Stride": "#17BEBB",
+}
+
+
+def build_comparison_graph(
+    input_path: str,
+    solver_schedules: dict[str, tuple[dict[int, int], dict[int, int]]],
+) -> go.Figure:
+    """Build a resource demand comparison chart overlaying all solver solutions.
+
+    Args:
+        input_path: Path to the MPS input file.
+        solver_schedules: Mapping of solver name to (starts_by_job, modes_by_job).
+
+    Returns:
+        A two-row Plotly figure: mechanic demand (top) and technician demand (bottom).
+    """
+    if not solver_schedules:
+        fig = go.Figure()
+        fig.update_layout(title="No solutions to compare.", template="plotly_white")
+        return fig
+
+    profile = _parse_mps_structure(input_path)
+    if not profile["jobs"]:
+        fig = go.Figure()
+        fig.update_layout(title="No data.", template="plotly_white")
+        return fig
+
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.12,
+        subplot_titles=("Mechanic Demand", "Technician Demand"),
+    )
+
+    for solver_name, (starts, modes) in solver_schedules.items():
+        color = _SOLVER_COLORS.get(solver_name, "#888888")
+        mech, tech, _ = _compute_demand(profile, starts, modes)
+        x = list(range(len(mech)))
+        fig.add_trace(
+            go.Scatter(
+                x=x, y=mech, mode="lines", name=solver_name,
+                line={"color": color, "width": 2},
+                legendgroup=solver_name, showlegend=True,
+            ),
+            row=1, col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=x, y=tech, mode="lines", name=solver_name,
+                line={"color": color, "width": 2},
+                legendgroup=solver_name, showlegend=False,
+            ),
+            row=2, col=1,
+        )
+
+    fig.update_layout(
+        template="plotly_white",
+        height=380,
+        margin={"l": 20, "r": 20, "t": 40, "b": 20},
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        legend={"orientation": "h", "y": 1.15, "x": 0},
+    )
+    fig.update_xaxes(title_text="Time", row=2, col=1)
+    fig.update_yaxes(title_text="Resource Units", row=1, col=1)
+    fig.update_yaxes(title_text="Resource Units", row=2, col=1)
+    return fig
 
 
 def build_solution_graph(
@@ -430,8 +549,15 @@ def build_solution_graph(
         ),
     )
 
-    for mode_val, color in _MODE_COLORS.items():
-        mode_jobs = [job for job in jobs_sorted if selected_mode[job] == mode_val]
+    for (res_type, mode_val), color in _JOB_COLORS.items():
+        mode_jobs = [
+            job for job in jobs_sorted
+            if selected_mode[job] == mode_val
+            and (
+                (res_type == "mechanic"    and profile["mechanic_use"].get((job, mode_val), 0) > 0)
+                or (res_type == "technician" and profile["technician_use"].get((job, mode_val), 0) > 0)
+            )
+        ]
         if not mode_jobs:
             continue
         fig.add_trace(
@@ -456,8 +582,9 @@ def build_solution_graph(
                     "Mechanics: %{customdata[1]}<br>"
                     "Technicians: %{customdata[2]}<extra></extra>"
                 ),
-                name=f"Mode {mode_val}",
-                legendgroup=f"mode{mode_val}",
+                name=f"{res_type.capitalize()} – Mode {mode_val}",
+                legendgroup=res_type,
+                legendgrouptitle_text=res_type.capitalize() if mode_val == 1 else None,
                 showlegend=True,
             ),
             row=1,
@@ -471,8 +598,9 @@ def build_solution_graph(
             x=x_axis,
             y=mech_demand,
             mode="lines",
-            line={"color": "#1f77b4", "width": 2},
+            line={"color": _MECHANIC_LINE_COLOR, "width": 2},
             name="Mechanics",
+            legendgroup="mechanic",
         ),
         row=2,
         col=1,
@@ -482,8 +610,9 @@ def build_solution_graph(
             x=x_axis,
             y=tech_demand,
             mode="lines",
-            line={"color": "#ff7f0e", "width": 2},
+            line={"color": _TECHNICIAN_LINE_COLOR, "width": 2},
             name="Technicians",
+            legendgroup="technician",
         ),
         row=2,
         col=1,

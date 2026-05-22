@@ -25,7 +25,7 @@ from dash.exceptions import PreventUpdate
 from demo_configs import KNOWN_OPTIMA
 from demo_interface import generate_table
 from src.demo_enums import SolverType
-from src.plot import build_input_graph, build_solution_graph
+from src.plot import build_input_graph, build_solution_graph, build_comparison_graph
 from src.demo_runner import compare_formulations, summarize_runs
 
 
@@ -518,9 +518,13 @@ def render_aggregate_results(
     selected_input = input_file or ""
 
     rows: list[dict] = []
-    for store in [highs_store or {}, scip_store or {}, stride_store or {}]:
+    store_rows: dict[str, list[dict]] = {}
+    for name, store in [("HiGHS", highs_store or {}), ("SCIP", scip_store or {}), ("Stride", stride_store or {})]:
         if store.get("run_click") == run_click:
-            rows.extend(store.get("rows", []))
+            store_rows[name] = store.get("rows", [])
+            rows.extend(store_rows[name])
+        else:
+            store_rows[name] = []
 
     if not rows:
         return (
@@ -532,6 +536,17 @@ def render_aggregate_results(
     summary_rows = summarize_runs(rows)
     known_optimal = KNOWN_OPTIMA.get(selected_input)
 
+    # Build per-solver best schedules for the comparison chart.
+    # JSON round-trip turns int keys into strings — convert them back.
+    solver_schedules: dict[str, tuple[dict, dict]] = {}
+    for name, s_rows in store_rows.items():
+        ok_rows = [r for r in s_rows if r.get("ok") and r.get("starts")]
+        if ok_rows:
+            best = min(ok_rows, key=lambda r: r.get("energy") or float("inf"))
+            starts = {int(k): v for k, v in best["starts"].items()}
+            modes  = {int(k): v for k, v in best["modes"].items()}
+            solver_schedules[name] = (starts, modes)
+
     def fmt_best_energy(val: object) -> str:
         if val is None:
             return "n/a"
@@ -542,6 +557,14 @@ def render_aggregate_results(
 
     results = html.Div(
         [
+            dcc.Graph(
+                figure=build_comparison_graph(selected_input, solver_schedules),
+                config={"displayModeBar": False},
+                responsive=True,
+            ) if solver_schedules else html.P(
+                "No solutions found to compare.",
+                style={"color": "#888", "fontStyle": "italic"},
+            ),
             html.H3("Comparison Summary"),
             generate_table(
                 {
