@@ -38,9 +38,9 @@ custom CSS can be added below.
     margin: auto;
 }
 
-  /****************************/
- /*** CUSTOM CSS GOES HERE ***/
-/****************************/
+#tabs-panel-results-tab .results {
+    max-width: none;
+}
 
 .tab-fail:where(:not([data-active])),
 .mantine-Tabs-tab:hover:where(:not([data-active])).tab-fail {

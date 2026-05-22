@@ -415,8 +415,8 @@ def _compute_demand(
 
 # Colors used for each solver in the comparison chart
 _SOLVER_COLORS = {
-    "HiGHS":  "#2d4376",
-    "SCIP":   "#E83E8C",
+    "HiGHS":  "#E83E8C",
+    "SCIP":   "#2d4376",
     "Stride": "#17BEBB",
 }
 

@@ -555,27 +555,61 @@ def render_aggregate_results(
             return f"{s} (optimal)"
         return s
 
+    # Determine row highlight colours for the summary table.
+    ok_energies = [
+        row["best_energy"] for row in summary_rows
+        if row["ok_runs"] > 0 and row["best_energy"] is not None
+    ]
+    min_energy = min(ok_energies) if ok_energies else None
+
+    def row_style(row: dict) -> dict:
+        if row["ok_runs"] == 0:
+            return {"backgroundColor": "rgb(245 118 119 / 36%)"}
+        if min_energy is not None and row["best_energy"] == min_energy:
+            return {"backgroundColor": "rgb(23 190 187 / 42%)"}
+        return {}
+
+    headers = ["Formulation", "Runs", "OK Runs", "Best Energy", "Avg Energy"]
+    summary_table = html.Table(
+        className="problem-details-table",
+        children=[
+            html.Thead(html.Tr([html.Th(h) for h in headers])),
+            html.Tbody([
+                html.Tr(
+                    style=row_style(row),
+                    children=[
+                        html.Td(str(row["formulation"])),
+                        html.Td(str(row["runs"])),
+                        html.Td(str(row["ok_runs"])),
+                        html.Td(fmt_best_energy(row["best_energy"])),
+                        html.Td(str(row["avg_energy"])),
+                    ],
+                )
+                for row in summary_rows
+            ]),
+        ],
+    )
+
     results = html.Div(
-        [
-            dcc.Graph(
-                figure=build_comparison_graph(selected_input, solver_schedules),
-                config={"displayModeBar": False},
-                responsive=True,
-            ) if solver_schedules else html.P(
-                "No solutions found to compare.",
-                style={"color": "#888", "fontStyle": "italic"},
+        style={"display": "flex", "gap": "2rem", "alignItems": "flex-start"},
+        children=[
+            html.Div(
+                children=dcc.Graph(
+                    figure=build_comparison_graph(selected_input, solver_schedules),
+                    config={"displayModeBar": False},
+                    responsive=True,
+                ) if solver_schedules else html.P(
+                    "No solutions found to compare.",
+                    style={"color": "#888", "fontStyle": "italic"},
+                ),
             ),
-            html.H3("Comparison Summary"),
-            generate_table(
-                {
-                    "Formulation": [str(row["formulation"]) for row in summary_rows],
-                    "Runs":        [str(row["runs"])        for row in summary_rows],
-                    "OK Runs":     [str(row["ok_runs"])     for row in summary_rows],
-                    "Best Energy": [fmt_best_energy(row["best_energy"]) for row in summary_rows],
-                    "Avg Energy":  [str(row["avg_energy"])  for row in summary_rows],
-                }
+            html.Div(
+                children=[
+                    html.H3("Comparison Summary"),
+                    summary_table,
+                ],
             ),
-        ]
+        ],
     )
 
     return results, False, "Results"
