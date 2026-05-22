@@ -288,7 +288,7 @@ def build_input_graph(input_path: str) -> go.Figure:
         shared_xaxes=True,
         vertical_spacing=0.14,
         subplot_titles=(
-            "Portfolio Timeline (Earliest Feasible Starts)",
+            "Timeline (Ignoring Resource Limits)",
             "Resource Demand",
         ),
     )
@@ -363,7 +363,6 @@ def build_input_graph(input_path: str) -> go.Figure:
     )
 
     fig.update_layout(
-        title="Plan",
         template="plotly_white",
         margin={"l": 20, "r": 20, "t": 30, "b": 20},
         paper_bgcolor="white",
