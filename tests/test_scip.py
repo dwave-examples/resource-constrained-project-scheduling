@@ -22,10 +22,10 @@ import pytest
 
 from src.scip import _extract_assignment_scip, solve_scip
 
-
 # ---------------------------------------------------------------------------
 # _extract_assignment_scip
 # ---------------------------------------------------------------------------
+
 
 def _make_scip_var(name: str, value: float) -> MagicMock:
     """Helper: create a mock SCIP variable with .name and a fixed value."""
@@ -52,50 +52,51 @@ class TestExtractAssignmentScip:
         model = self._make_model([("x_1_2_5", 1.0), ("x_2_1_0", 1.0)])
         starts, modes = _extract_assignment_scip(model)
         assert starts == {1: 5, 2: 0}
-        assert modes  == {1: 2, 2: 1}
+        assert modes == {1: 2, 2: 1}
 
     def test_below_threshold_excluded(self):
         model = self._make_model([("x_3_1_10", 0.4)])
         starts, modes = _extract_assignment_scip(model)
         assert starts == {}
-        assert modes  == {}
+        assert modes == {}
 
     def test_above_threshold_included(self):
         model = self._make_model([("x_3_1_10", 0.51)])
         starts, modes = _extract_assignment_scip(model)
         assert starts == {3: 10}
-        assert modes  == {3: 1}
+        assert modes == {3: 1}
 
     def test_best_candidate_wins(self):
         # Two candidates for job 5: lower value first, then higher
         model = self._make_model([("x_5_1_0", 0.3), ("x_5_2_7", 0.9)])
         starts, modes = _extract_assignment_scip(model)
         assert starts == {5: 7}
-        assert modes  == {5: 2}
+        assert modes == {5: 2}
 
     def test_non_x_variables_ignored(self):
         model = self._make_model([("C_1", 5.0), ("S_2", 3.0)])
         starts, modes = _extract_assignment_scip(model)
         assert starts == {}
-        assert modes  == {}
+        assert modes == {}
 
     def test_empty_model(self):
         model = self._make_model([])
         starts, modes = _extract_assignment_scip(model)
         assert starts == {}
-        assert modes  == {}
+        assert modes == {}
 
     def test_exception_returns_empty(self):
         model = MagicMock()
         model.getVars.side_effect = RuntimeError("no vars")
         starts, modes = _extract_assignment_scip(model)
         assert starts == {}
-        assert modes  == {}
+        assert modes == {}
 
 
 # ---------------------------------------------------------------------------
 # solve_scip
 # ---------------------------------------------------------------------------
+
 
 class TestSolveScip:
     def test_unavailable_when_model_is_none(self):

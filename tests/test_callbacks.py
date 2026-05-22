@@ -30,10 +30,10 @@ import pytest
 import demo_callbacks as cb
 from src.demo_enums import SolverType
 
-
 # ---------------------------------------------------------------------------
 # toggle_left_column
 # ---------------------------------------------------------------------------
+
 
 class TestToggleLeftColumn:
     def test_collapses_when_not_collapsed(self):
@@ -73,6 +73,7 @@ class TestToggleLeftColumn:
 # update_button_visibility
 # ---------------------------------------------------------------------------
 
+
 class TestUpdateButtonVisibility:
     def test_all_running_hides_run_button(self):
         run_style, cancel_style, in_progress = cb.update_button_visibility(True, True, True)
@@ -93,6 +94,7 @@ class TestUpdateButtonVisibility:
 # ---------------------------------------------------------------------------
 # _solver_tab_class
 # ---------------------------------------------------------------------------
+
 
 class TestSolverTabClass:
     def test_returns_success_when_any_ok(self):
@@ -115,13 +117,14 @@ class TestSolverTabClass:
 # _solver_panel
 # ---------------------------------------------------------------------------
 
+
 class TestSolverPanel:
     def _make_row(self, energy, ok=True, starts=None, modes=None):
         return {
             "energy": energy,
             "ok": ok,
             "starts": starts or {1: 0, 2: 5},
-            "modes":  modes  or {1: 1, 2: 2},
+            "modes": modes or {1: 1, 2: 2},
         }
 
     def test_returns_div(self, mps_path):
@@ -139,7 +142,7 @@ class TestSolverPanel:
     def test_picks_best_energy_row(self, mps_path):
         rows = [
             self._make_row(400.0, starts={1: 10}, modes={1: 1}),
-            self._make_row(302.0, starts={1: 0},  modes={1: 2}),
+            self._make_row(302.0, starts={1: 0}, modes={1: 2}),
         ]
         captured_starts = {}
 
@@ -157,6 +160,7 @@ class TestSolverPanel:
 # update_run_state
 # ---------------------------------------------------------------------------
 
+
 def _ctx(triggered_id):
     """Return a context manager that patches demo_callbacks.ctx.triggered_id."""
     mock = MagicMock()
@@ -166,7 +170,11 @@ def _ctx(triggered_id):
 
 class TestUpdateRunState:
     def test_run_button_click_all_selected(self):
-        selection = [str(SolverType.HIGHS.value), str(SolverType.SCIP.value), str(SolverType.STRIDE.value)]
+        selection = [
+            str(SolverType.HIGHS.value),
+            str(SolverType.SCIP.value),
+            str(SolverType.STRIDE.value),
+        ]
         with _ctx("run-button"):
             result = cb.update_run_state(1, 0, selection)
         assert result.run_button_style == {"display": "none"}
@@ -181,7 +189,7 @@ class TestUpdateRunState:
         with _ctx("cancel-button"):
             result = cb.update_run_state(0, 1, [])
         assert result.cancel_button_style == {"display": "none"}
-        assert result.run_button_style    == {}
+        assert result.run_button_style == {}
 
     def test_no_trigger_raises_prevent_update(self):
         with _ctx(None):
@@ -199,7 +207,7 @@ FAKE_RESULT = {
     "energy": 302.0,
     "ok": True,
     "starts": {1: 0},
-    "modes":  {1: 1},
+    "modes": {1: 1},
 }
 
 
@@ -218,7 +226,13 @@ class TestRunHighsCallback:
         assert result.highs_store == {"run_click": 1, "rows": []}
 
     def test_selected_calls_compare_formulations(self, mps_path):
-        fake_row = {**FAKE_RESULT, "formulation": "HiGHS (MILP)", "run": 1, "starts": {1: 0}, "modes": {1: 1}}
+        fake_row = {
+            **FAKE_RESULT,
+            "formulation": "HiGHS (MILP)",
+            "run": 1,
+            "starts": {1: 0},
+            "modes": {1: 1},
+        }
         with (
             patch("demo_callbacks.compare_formulations", return_value=[fake_row]),
             patch("demo_callbacks.build_solution_graph", return_value=go.Figure()),
@@ -248,7 +262,13 @@ class TestRunScipCallback:
         assert result.scip_tab_label == "SCIP"
 
     def test_selected_calls_compare_formulations(self, mps_path):
-        fake_row = {**FAKE_RESULT, "formulation": "SCIP (MILP)", "run": 1, "starts": {1: 0}, "modes": {1: 1}}
+        fake_row = {
+            **FAKE_RESULT,
+            "formulation": "SCIP (MILP)",
+            "run": 1,
+            "starts": {1: 0},
+            "modes": {1: 1},
+        }
         with (
             patch("demo_callbacks.compare_formulations", return_value=[fake_row]),
             patch("demo_callbacks.build_solution_graph", return_value=go.Figure()),
@@ -277,7 +297,13 @@ class TestRunStrideCallback:
         assert result.stride_tab_label == "Stride"
 
     def test_selected_calls_compare_formulations(self, mps_path):
-        fake_row = {**FAKE_RESULT, "formulation": "Stride Quantum Hybrid", "run": 1, "starts": {1: 0}, "modes": {1: 1}}
+        fake_row = {
+            **FAKE_RESULT,
+            "formulation": "Stride Quantum Hybrid",
+            "run": 1,
+            "starts": {1: 0},
+            "modes": {1: 1},
+        }
         with (
             patch("demo_callbacks.compare_formulations", return_value=[fake_row]),
             patch("demo_callbacks.build_solution_graph", return_value=go.Figure()),
@@ -304,15 +330,18 @@ SAMPLE_ROW = {
     "energy": 302.0,
     "ok": True,
     "starts": {"1": 0, "2": 5},
-    "modes":  {"1": 1, "2": 2},
+    "modes": {"1": 1, "2": 2},
 }
 
 
 class TestRenderAggregateResults:
     def test_empty_stores_returns_waiting_panel(self):
         content, disabled, label = cb.render_aggregate_results(
-            highs_store={}, scip_store={}, stride_store={},
-            run_click=1, input_file="input/30n20b8.mps",
+            highs_store={},
+            scip_store={},
+            stride_store={},
+            run_click=1,
+            input_file="input/30n20b8.mps",
         )
         assert disabled is True
         assert label == "Results"
@@ -321,8 +350,11 @@ class TestRenderAggregateResults:
         # Store from a different run_click should not count
         stale_store = {"run_click": 0, "rows": [SAMPLE_ROW]}
         content, disabled, label = cb.render_aggregate_results(
-            highs_store=stale_store, scip_store={}, stride_store={},
-            run_click=1, input_file="input/30n20b8.mps",
+            highs_store=stale_store,
+            scip_store={},
+            stride_store={},
+            run_click=1,
+            input_file="input/30n20b8.mps",
         )
         assert disabled is True
 
@@ -330,16 +362,22 @@ class TestRenderAggregateResults:
         store = {"run_click": 1, "rows": [SAMPLE_ROW]}
         with patch("demo_callbacks.build_comparison_graph", return_value=go.Figure()):
             content, disabled, label = cb.render_aggregate_results(
-                highs_store=store, scip_store={}, stride_store={},
-                run_click=1, input_file=mps_path,
+                highs_store=store,
+                scip_store={},
+                stride_store={},
+                run_click=1,
+                input_file=mps_path,
             )
         assert disabled is False
         assert label == "Results"
 
     def test_none_stores_treated_as_empty(self):
         content, disabled, label = cb.render_aggregate_results(
-            highs_store=None, scip_store=None, stride_store=None,
-            run_click=1, input_file="input/30n20b8.mps",
+            highs_store=None,
+            scip_store=None,
+            stride_store=None,
+            run_click=1,
+            input_file="input/30n20b8.mps",
         )
         assert disabled is True
 
@@ -347,7 +385,10 @@ class TestRenderAggregateResults:
         store = {"run_click": 2, "rows": [SAMPLE_ROW]}
         with patch("demo_callbacks.build_comparison_graph", return_value=go.Figure()):
             content, _, _ = cb.render_aggregate_results(
-                highs_store=store, scip_store={}, stride_store={},
-                run_click=2, input_file=mps_path,
+                highs_store=store,
+                scip_store={},
+                stride_store={},
+                run_click=2,
+                input_file=mps_path,
             )
         assert content is not None

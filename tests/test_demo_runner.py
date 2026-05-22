@@ -20,9 +20,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src.demo_runner import compare_formulations, summarize_runs
 from src.demo_enums import SolverType
-
+from src.demo_runner import compare_formulations, summarize_runs
 
 # ---------------------------------------------------------------------------
 # Shared fake solver outputs
@@ -34,7 +33,7 @@ FAKE_HIGHS_RESULT = {
     "energy": 302.0,
     "ok": True,
     "starts": {1: 0, 2: 5},
-    "modes":  {1: 1, 2: 2},
+    "modes": {1: 1, 2: 2},
 }
 
 FAKE_SCIP_RESULT = {
@@ -43,7 +42,7 @@ FAKE_SCIP_RESULT = {
     "energy": 310.0,
     "ok": True,
     "starts": {1: 0, 2: 6},
-    "modes":  {1: 2, 2: 1},
+    "modes": {1: 2, 2: 1},
 }
 
 FAKE_FAIL_RESULT = {
@@ -52,7 +51,7 @@ FAKE_FAIL_RESULT = {
     "energy": None,
     "ok": False,
     "starts": {},
-    "modes":  {},
+    "modes": {},
 }
 
 
@@ -60,10 +59,12 @@ FAKE_FAIL_RESULT = {
 # compare_formulations
 # ---------------------------------------------------------------------------
 
+
 class TestCompareFormulations:
     def _runners(self, overrides: dict):
         """Return a SOLVER_RUNNERS dict with specified solvers replaced by mocks."""
         from src.demo_runner import SOLVER_RUNNERS
+
         runners = dict(SOLVER_RUNNERS)
         for solver_type, fake_result in overrides.items():
             runners[solver_type] = lambda *a, result=fake_result, **kw: result
@@ -98,12 +99,14 @@ class TestCompareFormulations:
         with patch("src.demo_runner.SOLVER_RUNNERS", runners):
             rows = compare_formulations(
                 [str(SolverType.HIGHS.value), str(SolverType.SCIP.value)],
-                time_limit=5.0, runs=1, input_path="x.mps",
+                time_limit=5.0,
+                runs=1,
+                input_path="x.mps",
             )
         assert len(rows) == 2
         formulations = {r["formulation"] for r in rows}
         assert SolverType.HIGHS.label in formulations
-        assert SolverType.SCIP.label  in formulations
+        assert SolverType.SCIP.label in formulations
 
     def test_row_contains_starts_and_modes(self):
         runners = self._runners({SolverType.HIGHS: FAKE_HIGHS_RESULT})
@@ -112,7 +115,7 @@ class TestCompareFormulations:
                 [str(SolverType.HIGHS.value)], time_limit=5.0, runs=1, input_path="x.mps"
             )
         assert rows[0]["starts"] == FAKE_HIGHS_RESULT["starts"]
-        assert rows[0]["modes"]  == FAKE_HIGHS_RESULT["modes"]
+        assert rows[0]["modes"] == FAKE_HIGHS_RESULT["modes"]
 
     def test_row_required_keys(self):
         runners = self._runners({SolverType.HIGHS: FAKE_HIGHS_RESULT})
@@ -126,12 +129,17 @@ class TestCompareFormulations:
     def test_solvers_sorted_by_value(self):
         """SCIP (1) should appear before Stride (2) in the output."""
         runners = self._runners(
-            {SolverType.SCIP: FAKE_SCIP_RESULT, SolverType.STRIDE: {**FAKE_FAIL_RESULT, "solver": "Stride"}}
+            {
+                SolverType.SCIP: FAKE_SCIP_RESULT,
+                SolverType.STRIDE: {**FAKE_FAIL_RESULT, "solver": "Stride"},
+            }
         )
         with patch("src.demo_runner.SOLVER_RUNNERS", runners):
             rows = compare_formulations(
                 [str(SolverType.STRIDE.value), str(SolverType.SCIP.value)],
-                time_limit=5.0, runs=1, input_path="x.mps",
+                time_limit=5.0,
+                runs=1,
+                input_path="x.mps",
             )
         assert rows[0]["formulation"] == SolverType.SCIP.label
         assert rows[1]["formulation"] == SolverType.STRIDE.label
@@ -140,6 +148,7 @@ class TestCompareFormulations:
 # ---------------------------------------------------------------------------
 # summarize_runs
 # ---------------------------------------------------------------------------
+
 
 class TestSummarizeRuns:
     def _make_rows(self, energies: list[float | None], ok_flags: list[bool]) -> list[dict]:
@@ -151,7 +160,7 @@ class TestSummarizeRuns:
                 "energy": e,
                 "ok": ok,
                 "starts": {},
-                "modes":  {},
+                "modes": {},
             }
             for i, (e, ok) in enumerate(zip(energies, ok_flags))
         ]
@@ -175,12 +184,28 @@ class TestSummarizeRuns:
         rows = self._make_rows([None, None], [False, False])
         summary = summarize_runs(rows)
         assert summary[0]["best_energy"] == "n/a"
-        assert summary[0]["avg_energy"]  == "n/a"
+        assert summary[0]["avg_energy"] == "n/a"
 
     def test_multiple_formulations_sorted(self):
         rows = [
-            {"formulation": "SCIP (MILP)",  "run": 1, "status": "ok", "energy": 302.0, "ok": True, "starts": {}, "modes": {}},
-            {"formulation": "HiGHS (MILP)", "run": 1, "status": "ok", "energy": 310.0, "ok": True, "starts": {}, "modes": {}},
+            {
+                "formulation": "SCIP (MILP)",
+                "run": 1,
+                "status": "ok",
+                "energy": 302.0,
+                "ok": True,
+                "starts": {},
+                "modes": {},
+            },
+            {
+                "formulation": "HiGHS (MILP)",
+                "run": 1,
+                "status": "ok",
+                "energy": 310.0,
+                "ok": True,
+                "starts": {},
+                "modes": {},
+            },
         ]
         summary = summarize_runs(rows)
         names = [s["formulation"] for s in summary]

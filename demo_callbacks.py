@@ -17,11 +17,10 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import dash
-from dash import ctx, html
-from dash import MATCH
+import plotly.graph_objects as go
+from dash import MATCH, ctx, html
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
-import plotly.graph_objects as go
 
 from demo_configs import KNOWN_OPTIMA
 from demo_interface import (
@@ -33,8 +32,8 @@ from demo_interface import (
     waiting_panel,
 )
 from src.demo_enums import SolverType
-from src.plot import build_input_graph, build_solution_graph, build_comparison_graph
 from src.demo_runner import compare_formulations, summarize_runs
+from src.plot import build_comparison_graph, build_input_graph, build_solution_graph
 
 
 @dash.callback(
@@ -94,25 +93,27 @@ def render_initial_state(input_file: str) -> go.Figure:
 #    that trigger the three independent background solver callbacks below.
 # ---------------------------------------------------------------------------
 
+
 class UpdateRunStateReturn(NamedTuple):
     """Return type for update_run_state."""
-    results_tab_label:    str  = "Results"
+
+    results_tab_label: str = "Results"
     results_tab_disabled: bool = False
-    running_highs:        bool = False
-    highs_tab_label:      str  = "HiGHS"
-    highs_tab_disabled:   bool = False
-    highs_tab_class:      str  = ""
-    running_scip:         bool = False
-    scip_tab_label:       str  = "SCIP"
-    scip_tab_disabled:    bool = False
-    scip_tab_class:       str  = ""
-    running_stride:       bool = False
-    stride_tab_label:     str  = "Stride"
-    stride_tab_disabled:  bool = False
-    stride_tab_class:     str  = ""
-    run_button_style:     dict = {}
-    cancel_button_style:  dict = {"display": "none"}
-    tabs_value:           str  = dash.no_update
+    running_highs: bool = False
+    highs_tab_label: str = "HiGHS"
+    highs_tab_disabled: bool = False
+    highs_tab_class: str = ""
+    running_scip: bool = False
+    scip_tab_label: str = "SCIP"
+    scip_tab_disabled: bool = False
+    scip_tab_class: str = ""
+    running_stride: bool = False
+    stride_tab_label: str = "Stride"
+    stride_tab_disabled: bool = False
+    stride_tab_class: str = ""
+    run_button_style: dict = {}
+    cancel_button_style: dict = {"display": "none"}
+    tabs_value: str = dash.no_update
 
 
 @dash.callback(
@@ -157,30 +158,30 @@ def update_run_state(
         running-* flags for each solver.
     """
     selection = solver_selection or []
-    highs_selected  = str(SolverType.HIGHS.value)  in selection
-    scip_selected   = str(SolverType.SCIP.value)   in selection
+    highs_selected = str(SolverType.HIGHS.value) in selection
+    scip_selected = str(SolverType.SCIP.value) in selection
     stride_selected = str(SolverType.STRIDE.value) in selection
 
     if ctx.triggered_id == "run-button" and run_click:
         any_selected = highs_selected or scip_selected or stride_selected
         return UpdateRunStateReturn(
-            results_tab_label=   "Loading..." if any_selected else "Results",
-            results_tab_disabled= True,
-            running_highs=        highs_selected,
-            highs_tab_label=      "Loading..." if highs_selected else "HiGHS",
-            highs_tab_disabled=   True,
-            highs_tab_class=      "",
-            running_scip=         scip_selected,
-            scip_tab_label=       "Loading..." if scip_selected else "SCIP",
-            scip_tab_disabled=    True,
-            scip_tab_class=       "",
-            running_stride=       stride_selected,
-            stride_tab_label=     "Loading..." if stride_selected else "Stride",
-            stride_tab_disabled=  True,
-            stride_tab_class=     "",
-            run_button_style=     {"display": "none"},
-            cancel_button_style=  {},
-            tabs_value=           "input-tab",
+            results_tab_label="Loading..." if any_selected else "Results",
+            results_tab_disabled=True,
+            running_highs=highs_selected,
+            highs_tab_label="Loading..." if highs_selected else "HiGHS",
+            highs_tab_disabled=True,
+            highs_tab_class="",
+            running_scip=scip_selected,
+            scip_tab_label="Loading..." if scip_selected else "SCIP",
+            scip_tab_disabled=True,
+            scip_tab_class="",
+            running_stride=stride_selected,
+            stride_tab_label="Loading..." if stride_selected else "Stride",
+            stride_tab_disabled=True,
+            stride_tab_class="",
+            run_button_style={"display": "none"},
+            cancel_button_style={},
+            tabs_value="input-tab",
         )
 
     if ctx.triggered_id == "cancel-button" and cancel_click:
@@ -193,6 +194,7 @@ def update_run_state(
 # 2. Button-visibility watchdog — restores run/cancel when all solvers finish.
 #    Mirrors update_button_visibility in the example.
 # ---------------------------------------------------------------------------
+
 
 @dash.callback(
     Output("run-button", "style", allow_duplicate=True),
@@ -233,6 +235,7 @@ def update_button_visibility(
 # Helper shared by the three solver background callbacks.
 # ---------------------------------------------------------------------------
 
+
 def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
     """Build the content for a single solver's results tab.
 
@@ -246,7 +249,9 @@ def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
     """
     best = min(
         rows,
-        key=lambda row: row["energy"] if isinstance(row.get("energy"), (int, float)) else float("inf"),
+        key=lambda row: (
+            row["energy"] if isinstance(row.get("energy"), (int, float)) else float("inf")
+        ),
     )
     has_solution = bool(best.get("starts")) and bool(best.get("modes"))
     figure = (
@@ -256,7 +261,8 @@ def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
             best.get("modes", {}),
             title=f"{label} Best Solution View",
         )
-        if has_solution else None
+        if has_solution
+        else None
     )
     return solver_solution_panel(has_solution, figure)
 
@@ -278,14 +284,16 @@ def _solver_tab_class(rows: list[dict]) -> str:
 #      button click and all execute concurrently.
 # ---------------------------------------------------------------------------
 
+
 class RunHiGHSReturn(NamedTuple):
     """Return type for run_highs."""
-    highs_results: html.Div     = dash.no_update
-    highs_store: dict            = dash.no_update
-    highs_tab_label: str         = "HiGHS"
-    highs_tab_disabled: bool     = False
-    running_highs: bool          = False
-    highs_tab_class: str         = dash.no_update
+
+    highs_results: html.Div = dash.no_update
+    highs_store: dict = dash.no_update
+    highs_tab_label: str = "HiGHS"
+    highs_tab_disabled: bool = False
+    running_highs: bool = False
+    highs_tab_class: str = dash.no_update
 
 
 @dash.callback(
@@ -344,12 +352,13 @@ def run_highs(
 
 class RunSCIPReturn(NamedTuple):
     """Return type for run_scip."""
-    scip_results: html.Div      = dash.no_update
-    scip_store: dict             = dash.no_update
-    scip_tab_label: str          = "SCIP"
-    scip_tab_disabled: bool      = False
-    running_scip: bool           = False
-    scip_tab_class: str          = dash.no_update
+
+    scip_results: html.Div = dash.no_update
+    scip_store: dict = dash.no_update
+    scip_tab_label: str = "SCIP"
+    scip_tab_disabled: bool = False
+    running_scip: bool = False
+    scip_tab_class: str = dash.no_update
 
 
 @dash.callback(
@@ -408,12 +417,13 @@ def run_scip(
 
 class RunStrideReturn(NamedTuple):
     """Return type for run_stride."""
-    stride_results: html.Div    = dash.no_update
-    stride_store: dict           = dash.no_update
-    stride_tab_label: str        = "Stride"
-    stride_tab_disabled: bool    = False
-    running_stride: bool         = False
-    stride_tab_class: str        = dash.no_update
+
+    stride_results: html.Div = dash.no_update
+    stride_store: dict = dash.no_update
+    stride_tab_label: str = "Stride"
+    stride_tab_disabled: bool = False
+    running_stride: bool = False
+    stride_tab_class: str = dash.no_update
 
 
 @dash.callback(
@@ -475,6 +485,7 @@ def run_stride(
 #    Results tab from whichever solvers have completed so far.
 # ---------------------------------------------------------------------------
 
+
 @dash.callback(
     Output("results", "children"),
     Output("results-tab", "disabled", allow_duplicate=True),
@@ -518,7 +529,11 @@ def render_aggregate_results(
 
     rows: list[dict] = []
     store_rows: dict[str, list[dict]] = {}
-    for name, store in [("HiGHS", highs_store or {}), ("SCIP", scip_store or {}), ("Stride", stride_store or {})]:
+    for name, store in [
+        ("HiGHS", highs_store or {}),
+        ("SCIP", scip_store or {}),
+        ("Stride", stride_store or {}),
+    ]:
         if store.get("run_click") == run_click:
             store_rows[name] = store.get("rows", [])
             rows.extend(store_rows[name])
@@ -539,11 +554,12 @@ def render_aggregate_results(
         if ok_rows:
             best = min(ok_rows, key=lambda r: r.get("energy") or float("inf"))
             starts = {int(k): v for k, v in best["starts"].items()}
-            modes  = {int(k): v for k, v in best["modes"].items()}
+            modes = {int(k): v for k, v in best["modes"].items()}
             solver_schedules[name] = (starts, modes)
 
     ok_energies = [
-        row["best_energy"] for row in summary_rows
+        row["best_energy"]
+        for row in summary_rows
         if row["ok_runs"] > 0 and row["best_energy"] is not None
     ]
     min_energy = min(ok_energies) if ok_energies else None

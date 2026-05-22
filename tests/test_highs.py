@@ -23,10 +23,10 @@ import pytest
 
 from src.highs import _extract_assignment_highs, solve_highs
 
-
 # ---------------------------------------------------------------------------
 # _extract_assignment_highs
 # ---------------------------------------------------------------------------
+
 
 class TestExtractAssignmentHighs:
     def _make_model(self, names: list[str], values: list[float]) -> MagicMock:
@@ -39,58 +39,58 @@ class TestExtractAssignmentHighs:
 
     def test_basic_extraction(self):
         # x_<job>_<mode>_<start> — job 1 mode 2 starts at 5, job 2 mode 1 starts at 0
-        names  = ["x_1_2_5", "x_2_1_0", "other_var"]
-        values = [1.0,        1.0,        0.0]
+        names = ["x_1_2_5", "x_2_1_0", "other_var"]
+        values = [1.0, 1.0, 0.0]
         model = self._make_model(names, values)
         starts, modes = _extract_assignment_highs(model)
         assert starts == {1: 5, 2: 0}
-        assert modes  == {1: 2, 2: 1}
+        assert modes == {1: 2, 2: 1}
 
     def test_fractional_value_below_threshold_excluded(self):
-        names  = ["x_3_1_10"]
-        values = [0.4]          # below 0.5 threshold
+        names = ["x_3_1_10"]
+        values = [0.4]  # below 0.5 threshold
         model = self._make_model(names, values)
         starts, modes = _extract_assignment_highs(model)
         assert starts == {}
-        assert modes  == {}
+        assert modes == {}
 
     def test_fractional_value_above_threshold_included(self):
-        names  = ["x_3_1_10"]
+        names = ["x_3_1_10"]
         values = [0.51]
         model = self._make_model(names, values)
         starts, modes = _extract_assignment_highs(model)
         assert starts == {3: 10}
-        assert modes  == {3: 1}
+        assert modes == {3: 1}
 
     def test_best_value_wins_for_duplicate_job(self):
         # Two candidates for job 5: value 0.3 and 0.9 — only the higher one counts
-        names  = ["x_5_1_0", "x_5_2_7"]
-        values = [0.3,        0.9]
+        names = ["x_5_1_0", "x_5_2_7"]
+        values = [0.3, 0.9]
         model = self._make_model(names, values)
         starts, modes = _extract_assignment_highs(model)
         assert starts == {5: 7}
-        assert modes  == {5: 2}
+        assert modes == {5: 2}
 
     def test_no_matching_variables(self):
-        names  = ["C_1", "S_2", "R_Mechaniker"]
+        names = ["C_1", "S_2", "R_Mechaniker"]
         values = [1.0, 1.0, 40.0]
         model = self._make_model(names, values)
         starts, modes = _extract_assignment_highs(model)
         assert starts == {}
-        assert modes  == {}
+        assert modes == {}
 
     def test_empty_names_returns_empty(self):
         model = self._make_model([], [])
         starts, modes = _extract_assignment_highs(model)
         assert starts == {}
-        assert modes  == {}
+        assert modes == {}
 
     def test_get_lp_raises_falls_back(self):
         model = MagicMock()
         model.getLp.side_effect = RuntimeError("no LP")
         starts, modes = _extract_assignment_highs(model)
         assert starts == {}
-        assert modes  == {}
+        assert modes == {}
 
     def test_all_variable_values_raises_falls_back(self):
         lp = SimpleNamespace(col_names_=["x_1_1_0"])
@@ -100,12 +100,13 @@ class TestExtractAssignmentHighs:
         model.getSolution.side_effect = RuntimeError("no solution either")
         starts, modes = _extract_assignment_highs(model)
         assert starts == {}
-        assert modes  == {}
+        assert modes == {}
 
 
 # ---------------------------------------------------------------------------
 # solve_highs
 # ---------------------------------------------------------------------------
+
 
 class TestSolveHighs:
     def test_unavailable_when_hs_is_none(self):

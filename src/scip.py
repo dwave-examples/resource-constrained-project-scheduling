@@ -21,7 +21,6 @@ from typing import Any
 from pyscipopt import Model
 
 
-
 def _extract_assignment_scip(model: Any) -> tuple[dict[int, int], dict[int, int]]:
     """Extract the start-time and mode assignment from a solved SCIP model.
 

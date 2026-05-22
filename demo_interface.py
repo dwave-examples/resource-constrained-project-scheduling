@@ -13,22 +13,17 @@
 # limitations under the License.
 
 """This file stores the Dash HTML layout for the app."""
+
 from __future__ import annotations
+
 from enum import EnumMeta
 from pathlib import Path
 
-from dash import dcc, html
 import dash_mantine_components as dmc
 import plotly.graph_objects as go
+from dash import dcc, html
 
-from demo_configs import (
-    DESCRIPTION,
-    INPUTS,
-    MAIN_HEADER,
-    RUNS,
-    SOLVER_TIME,
-    THUMBNAIL,
-)
+from demo_configs import DESCRIPTION, INPUTS, MAIN_HEADER, RUNS, SOLVER_TIME, THUMBNAIL
 from src.demo_enums import SolverType
 
 THEME_COLOR = "#2d4376"
@@ -86,8 +81,8 @@ def range_slider(label: str, id: str, config: dict) -> html.Div:
                 thumbFromLabel=f"{label} slider start",
                 thumbToLabel=f"{label} slider end",
                 color=THEME_COLOR,
-            )
-        ]
+            ),
+        ],
     )
 
 
@@ -134,7 +129,9 @@ def checklist(label: str, id: str, options: list, values: list, inline: bool = T
                 value=values,
                 children=dmc.Group(
                     [
-                        dmc.Checkbox(label=option["label"], value=option["value"], color=THEME_COLOR)
+                        dmc.Checkbox(
+                            label=option["label"], value=option["value"], color=THEME_COLOR
+                        )
                         for option in options
                     ],
                 ),
@@ -193,7 +190,7 @@ def radio(label: str, id: str, options: list, value: str, inline: bool = True) -
     )
 
 
-def input(label: str, id: str, configs: dict, type: str="number") -> html.Div:
+def input(label: str, id: str, configs: dict, type: str = "number") -> html.Div:
     """Input element for either text or number input.
 
     Args:
@@ -206,12 +203,16 @@ def input(label: str, id: str, configs: dict, type: str="number") -> html.Div:
         className="input-wrapper",
         children=[
             html.Label(label, htmlFor=id),
-            dmc.TextInput(
-                id=id,
-                **configs,
-            ) if type == "text" else dmc.NumberInput(
-                id=id,
-                **configs,
+            (
+                dmc.TextInput(
+                    id=id,
+                    **configs,
+                )
+                if type == "text"
+                else dmc.NumberInput(
+                    id=id,
+                    **configs,
+                )
             ),
         ],
     )
@@ -379,6 +380,7 @@ def comparison_summary_table(
         An html.Table with styled rows and an ``(optimal)`` annotation where
         applicable.
     """
+
     def fmt_energy(val: object) -> str:
         if val is None:
             return "n/a"
@@ -399,19 +401,21 @@ def comparison_summary_table(
         className="problem-details-table",
         children=[
             html.Thead(html.Tr([html.Th(h) for h in headers])),
-            html.Tbody([
-                html.Tr(
-                    className=row_class(row),
-                    children=[
-                        html.Td(str(row["formulation"])),
-                        html.Td(str(row["runs"])),
-                        html.Td(str(row["ok_runs"])),
-                        html.Td(fmt_energy(row["best_energy"])),
-                        html.Td(str(row["avg_energy"])),
-                    ],
-                )
-                for row in summary_rows
-            ]),
+            html.Tbody(
+                [
+                    html.Tr(
+                        className=row_class(row),
+                        children=[
+                            html.Td(str(row["formulation"])),
+                            html.Td(str(row["runs"])),
+                            html.Td(str(row["ok_runs"])),
+                            html.Td(fmt_energy(row["best_energy"])),
+                            html.Td(str(row["avg_energy"])),
+                        ],
+                    )
+                    for row in summary_rows
+                ]
+            ),
         ],
     )
 
@@ -588,11 +592,13 @@ def create_interface() -> html.Div:
                                                         children=html.Div(
                                                             id="input",
                                                             children=dcc.Graph(
-                                                                id="input-graph", config={"displayModeBar": False}, responsive=True
-                                                            )
+                                                                id="input-graph",
+                                                                config={"displayModeBar": False},
+                                                                responsive=True,
+                                                            ),
                                                         ),
                                                     ),
-                                                ]
+                                                ],
                                             )
                                         ],
                                     ),

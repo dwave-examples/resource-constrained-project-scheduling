@@ -23,7 +23,6 @@ from src.highs import solve_highs
 from src.scip import solve_scip
 from src.stride import solve_stride
 
-
 SOLVER_RUNNERS = {
     SolverType.HIGHS: solve_highs,
     SolverType.SCIP: solve_scip,
@@ -31,7 +30,9 @@ SOLVER_RUNNERS = {
 }
 
 
-def compare_formulations(selection: list[str], time_limit: float, runs: int, input_path: str) -> list[dict]:
+def compare_formulations(
+    selection: list[str], time_limit: float, runs: int, input_path: str
+) -> list[dict]:
     """Run selected solver formulations repeatedly and collect run-level results.
 
     Args:
@@ -45,7 +46,9 @@ def compare_formulations(selection: list[str], time_limit: float, runs: int, inp
         ``"formulation"``, ``"run"``, ``"status"``, ``"energy"``, ``"ok"``,
         ``"starts"``, and ``"modes"`` keys.
     """
-    selected_types = sorted({SolverType(int(value)) for value in selection}, key=lambda entry: entry.value)
+    selected_types = sorted(
+        {SolverType(int(value)) for value in selection}, key=lambda entry: entry.value
+    )
 
     rows = []
     for solver_type in selected_types:
@@ -84,7 +87,9 @@ def summarize_runs(rows: list[dict]) -> list[dict]:
 
     summary = []
     for formulation, items in groups.items():
-        valid_energies = [item["energy"] for item in items if isinstance(item["energy"], (int, float))]
+        valid_energies = [
+            item["energy"] for item in items if isinstance(item["energy"], (int, float))
+        ]
         ok_runs = sum(1 for item in items if item["ok"])
         summary.append(
             {

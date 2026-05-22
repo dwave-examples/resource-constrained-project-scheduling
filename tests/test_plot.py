@@ -16,8 +16,8 @@
 
 from __future__ import annotations
 
-import pytest
 import plotly.graph_objects as go
+import pytest
 
 from src.plot import (
     _choose_business_mode,
@@ -30,10 +30,10 @@ from src.plot import (
     parse_mps_structure,
 )
 
-
 # ---------------------------------------------------------------------------
 # _parse_mps_structure
 # ---------------------------------------------------------------------------
+
 
 class TestParseMpsStructure:
     def test_missing_file_returns_empty(self):
@@ -67,14 +67,15 @@ class TestParseMpsStructure:
 
     def test_public_wrapper_matches_private(self, mps_path):
         private = _parse_mps_structure(mps_path)
-        public  = parse_mps_structure(mps_path)
-        assert private["jobs"]  == public["jobs"]
+        public = parse_mps_structure(mps_path)
+        assert private["jobs"] == public["jobs"]
         assert private["edges"] == public["edges"]
 
 
 # ---------------------------------------------------------------------------
 # _choose_business_mode
 # ---------------------------------------------------------------------------
+
 
 class TestChooseBusinessMode:
     def test_single_mode_returns_that_mode(self, simple_profile):
@@ -91,8 +92,8 @@ class TestChooseBusinessMode:
         profile = {
             "jobs": [1],
             "edges": [],
-            "durations":      {(1, 1): 5, (1, 2): 5},
-            "mechanic_use":   {(1, 1): 3.0, (1, 2): 1.0},
+            "durations": {(1, 1): 5, (1, 2): 5},
+            "mechanic_use": {(1, 1): 3.0, (1, 2): 1.0},
             "technician_use": {(1, 1): 0.0, (1, 2): 0.0},
             "capacities": {"Mechaniker": 5.0, "Techniker": 0.0},
         }
@@ -107,6 +108,7 @@ class TestChooseBusinessMode:
 # _earliest_start_schedule
 # ---------------------------------------------------------------------------
 
+
 class TestEarliestStartSchedule:
     def test_chain_topology(self, simple_profile):
         starts, durations, modes = _earliest_start_schedule(simple_profile)
@@ -117,9 +119,9 @@ class TestEarliestStartSchedule:
 
     def test_all_jobs_present(self, simple_profile):
         starts, durations, modes = _earliest_start_schedule(simple_profile)
-        assert set(starts.keys())    == {1, 2, 3}
+        assert set(starts.keys()) == {1, 2, 3}
         assert set(durations.keys()) == {1, 2, 3}
-        assert set(modes.keys())     == {1, 2, 3}
+        assert set(modes.keys()) == {1, 2, 3}
 
     def test_durations_at_least_one(self, simple_profile):
         _, durations, _ = _earliest_start_schedule(simple_profile)
@@ -130,8 +132,8 @@ class TestEarliestStartSchedule:
         profile = {
             "jobs": [1, 2, 3],
             "edges": [],
-            "durations":      {(1, 1): 5, (2, 1): 3, (3, 1): 4},
-            "mechanic_use":   {(1, 1): 1.0, (2, 1): 1.0, (3, 1): 1.0},
+            "durations": {(1, 1): 5, (2, 1): 3, (3, 1): 4},
+            "mechanic_use": {(1, 1): 1.0, (2, 1): 1.0, (3, 1): 1.0},
             "technician_use": {(1, 1): 0.0, (2, 1): 0.0, (3, 1): 0.0},
             "capacities": {"Mechaniker": 3.0, "Techniker": 0.0},
         }
@@ -144,17 +146,18 @@ class TestEarliestStartSchedule:
 # _compute_demand
 # ---------------------------------------------------------------------------
 
+
 class TestComputeDemand:
     def test_demand_length_equals_horizon(self, simple_profile):
         starts = {1: 0, 2: 5, 3: 8}
-        modes  = {1: 1, 2: 1, 3: 1}
+        modes = {1: 1, 2: 1, 3: 1}
         mech, tech, horizon = _compute_demand(simple_profile, starts, modes)
         assert len(mech) == horizon
         assert len(tech) == horizon
 
     def test_demand_non_negative(self, simple_profile):
         starts = {1: 0, 2: 5, 3: 8}
-        modes  = {1: 1, 2: 1, 3: 1}
+        modes = {1: 1, 2: 1, 3: 1}
         mech, tech, _ = _compute_demand(simple_profile, starts, modes)
         assert all(v >= 0 for v in mech)
         assert all(v >= 0 for v in tech)
@@ -162,7 +165,7 @@ class TestComputeDemand:
     def test_mechanic_demand_in_job1_slot(self, simple_profile):
         # job 1 uses 2 mechanics from t=0 to t=4
         starts = {1: 0, 2: 5, 3: 8}
-        modes  = {1: 1, 2: 1, 3: 1}
+        modes = {1: 1, 2: 1, 3: 1}
         mech, _, _ = _compute_demand(simple_profile, starts, modes)
         assert mech[0] == pytest.approx(2.0)
         assert mech[4] == pytest.approx(2.0)
@@ -179,6 +182,7 @@ class TestComputeDemand:
 # ---------------------------------------------------------------------------
 # build_input_graph
 # ---------------------------------------------------------------------------
+
 
 class TestBuildInputGraph:
     def test_returns_figure(self, mps_path):
@@ -205,6 +209,7 @@ class TestBuildInputGraph:
 # build_comparison_graph
 # ---------------------------------------------------------------------------
 
+
 class TestBuildComparisonGraph:
     def test_empty_schedules_returns_figure(self, mps_path):
         fig = build_comparison_graph(mps_path, {})
@@ -218,32 +223,33 @@ class TestBuildComparisonGraph:
     def test_with_one_solver(self, mps_path):
         # Use a trivial schedule: all jobs start at 0 in mode 1
         starts = {j: 0 for j in range(1, 31)}
-        modes  = {j: 1 for j in range(1, 31)}
+        modes = {j: 1 for j in range(1, 31)}
         fig = build_comparison_graph(mps_path, {"HiGHS": (starts, modes)})
         assert isinstance(fig, go.Figure)
         assert len(fig.data) > 0
 
     def test_with_multiple_solvers(self, mps_path):
         starts = {j: 0 for j in range(1, 31)}
-        modes  = {j: 1 for j in range(1, 31)}
+        modes = {j: 1 for j in range(1, 31)}
         schedules = {
             "HiGHS": (starts, modes),
-            "SCIP":  (starts, modes),
+            "SCIP": (starts, modes),
         }
         fig = build_comparison_graph(mps_path, schedules)
         solver_names = {trace.name for trace in fig.data}
         assert "HiGHS" in solver_names
-        assert "SCIP"  in solver_names
+        assert "SCIP" in solver_names
 
 
 # ---------------------------------------------------------------------------
 # build_solution_graph
 # ---------------------------------------------------------------------------
 
+
 class TestBuildSolutionGraph:
     def test_returns_figure_with_solution(self, mps_path):
         starts = {j: 0 for j in range(1, 31)}
-        modes  = {j: 1 for j in range(1, 31)}
+        modes = {j: 1 for j in range(1, 31)}
         fig = build_solution_graph(mps_path, starts, modes, "Test Title")
         assert isinstance(fig, go.Figure)
 
@@ -258,6 +264,6 @@ class TestBuildSolutionGraph:
 
     def test_has_traces(self, mps_path):
         starts = {j: j for j in range(1, 31)}
-        modes  = {j: 1 for j in range(1, 31)}
+        modes = {j: 1 for j in range(1, 31)}
         fig = build_solution_graph(mps_path, starts, modes, "Test")
         assert len(fig.data) > 0

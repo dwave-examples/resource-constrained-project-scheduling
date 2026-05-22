@@ -21,7 +21,6 @@ from typing import Any
 import highspy as hs
 
 
-
 def _extract_assignment_highs(highs_model: Any) -> tuple[dict[int, int], dict[int, int]]:
     """Extract the start-time and mode assignment from a solved HiGHS model.
 
@@ -113,6 +112,7 @@ def solve_highs(time_limit: float, input_path: str) -> dict[str, Any]:
         starts, modes = _extract_assignment_highs(h)
 
         import math
+
         obj = info.objective_function_value
         feasible = math.isfinite(obj)
         return {

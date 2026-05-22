@@ -17,8 +17,8 @@
 from __future__ import annotations
 
 import os
-import pytest
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Path helpers
@@ -37,6 +37,7 @@ def mps_path() -> str:
 # ---------------------------------------------------------------------------
 # Minimal synthetic profile used by pure-function tests that don't need MPS
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def simple_profile() -> dict:
@@ -65,8 +66,8 @@ def multi_mode_profile() -> dict:
     return {
         "jobs": [1, 2],
         "edges": [(1, 2)],
-        "durations":      {(1, 1): 10, (1, 2): 4, (2, 1): 6, (2, 2): 3},
-        "mechanic_use":   {(1, 1): 1.0, (1, 2): 3.0, (2, 1): 2.0, (2, 2): 2.0},
+        "durations": {(1, 1): 10, (1, 2): 4, (2, 1): 6, (2, 2): 3},
+        "mechanic_use": {(1, 1): 1.0, (1, 2): 3.0, (2, 1): 2.0, (2, 2): 2.0},
         "technician_use": {(1, 1): 0.0, (1, 2): 0.0, (2, 1): 0.0, (2, 2): 0.0},
         "capacities": {"Mechaniker": 5.0, "Techniker": 0.0},
     }

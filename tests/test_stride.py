@@ -28,22 +28,22 @@ from src.stride import (
     solve_stride,
 )
 
-
 # ---------------------------------------------------------------------------
 # create_runtime_use_matrices  (integration — uses real MPS file)
 # ---------------------------------------------------------------------------
 
+
 class TestCreateRuntimeUseMatrices:
     def test_shapes(self, mps_path):
         rt, rm, rtech = create_runtime_use_matrices(mps_path)
-        assert rt.shape   == (30, 3)
-        assert rm.shape   == (30, 3)
+        assert rt.shape == (30, 3)
+        assert rm.shape == (30, 3)
         assert rtech.shape == (30, 3)
 
     def test_non_negative_values(self, mps_path):
         rt, rm, rtech = create_runtime_use_matrices(mps_path)
-        assert (rt   >= 0).all()
-        assert (rm   >= 0).all()
+        assert (rt >= 0).all()
+        assert (rm >= 0).all()
         assert (rtech >= 0).all()
 
     def test_runtimes_are_positive_for_at_least_some_jobs(self, mps_path):
@@ -54,6 +54,7 @@ class TestCreateRuntimeUseMatrices:
 # ---------------------------------------------------------------------------
 # create_precedence_pairs  (integration — uses real MPS file)
 # ---------------------------------------------------------------------------
+
 
 class TestCreatePrecedencePairs:
     def test_returns_list_of_tuples(self, mps_path):
@@ -80,6 +81,7 @@ class TestCreatePrecedencePairs:
 # _preprocessed_data  (caching wrapper)
 # ---------------------------------------------------------------------------
 
+
 class TestPreprocessedData:
     def test_returns_four_tuple(self, mps_path):
         result = _preprocessed_data(mps_path)
@@ -96,6 +98,7 @@ class TestPreprocessedData:
 # solve_stride
 # ---------------------------------------------------------------------------
 
+
 class TestSolveStride:
     def test_unavailable_when_sampler_is_none(self):
         with patch("src.stride.LeapHybridNLSampler", None):
@@ -108,14 +111,14 @@ class TestSolveStride:
     def test_successful_run(self, mps_path):
         """Mock the sampler and model state to exercise the happy path."""
         runtimes = np.zeros((30, 3))
-        rm_use   = np.zeros((30, 3))
-        rt_use   = np.zeros((30, 3))
-        pairs    = [(1, 2)]
+        rm_use = np.zeros((30, 3))
+        rt_use = np.zeros((30, 3))
+        pairs = [(1, 2)]
 
         fake_starts = MagicMock()
         fake_starts.state.return_value = np.zeros(30)
-        fake_modes  = MagicMock()
-        fake_modes.state.return_value  = np.zeros(30)
+        fake_modes = MagicMock()
+        fake_modes.state.return_value = np.zeros(30)
 
         fake_objective = MagicMock()
         fake_objective.state.return_value = np.array([302.0])
@@ -143,18 +146,18 @@ class TestSolveStride:
         assert isinstance(result["starts"], dict)
         assert isinstance(result["modes"], dict)
         assert len(result["starts"]) == 30
-        assert len(result["modes"])  == 30
+        assert len(result["modes"]) == 30
 
     def test_modes_are_one_indexed_in_output(self, mps_path):
         """Modes returned by solve_stride should be 1-indexed (raw value + 1)."""
         runtimes = np.zeros((30, 3))
-        rm_use   = np.zeros((30, 3))
-        rt_use   = np.zeros((30, 3))
-        pairs    = []
+        rm_use = np.zeros((30, 3))
+        rt_use = np.zeros((30, 3))
+        pairs = []
 
         fake_starts = MagicMock()
         fake_starts.state.return_value = np.zeros(30)
-        fake_modes  = MagicMock()
+        fake_modes = MagicMock()
         # All modes at raw index 0 should become mode 1
         fake_modes.state.return_value = np.zeros(30)
 

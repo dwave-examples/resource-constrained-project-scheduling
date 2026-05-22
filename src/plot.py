@@ -23,16 +23,17 @@ from plotly.subplots import make_subplots
 
 # Colors keyed by (resource_type, mode): shade encodes mode speed within each resource family
 _JOB_COLORS: dict[tuple[str, int], str] = {
-    ("mechanic",    1): "#9BC2F1",
-    ("mechanic",    2): "#3886E3",
-    ("mechanic",    3): "#1757A5",
-    ("technician",  1): "#F8AF7B",
-    ("technician",  2): "#EF6B0D",
-    ("technician",  3): "#A64A09",
+    ("mechanic", 1): "#9BC2F1",
+    ("mechanic", 2): "#3886E3",
+    ("mechanic", 3): "#1757A5",
+    ("technician", 1): "#F8AF7B",
+    ("technician", 2): "#EF6B0D",
+    ("technician", 3): "#A64A09",
 }
 # Mid-shade of each family used for the resource demand lines
 _MECHANIC_LINE_COLOR = "#3886E3"
 _TECHNICIAN_LINE_COLOR = "#EF6B0D"
+
 
 def _parse_mps_structure(input_path: str) -> dict:
     """Parse an MPS file to extract jobs, precedences, resource usage, and capacities.
@@ -199,21 +200,9 @@ def _choose_business_mode(job: int, profile: dict) -> int:
     tech = profile["technician_use"]
 
     candidate_modes = sorted(
-        {
-            mode
-            for (job_id, mode) in durations.keys()
-            if job_id == job
-        }
-        | {
-            mode
-            for (job_id, mode) in mech.keys()
-            if job_id == job
-        }
-        | {
-            mode
-            for (job_id, mode) in tech.keys()
-            if job_id == job
-        }
+        {mode for (job_id, mode) in durations.keys() if job_id == job}
+        | {mode for (job_id, mode) in mech.keys() if job_id == job}
+        | {mode for (job_id, mode) in tech.keys() if job_id == job}
     )
 
     if not candidate_modes:
@@ -229,7 +218,9 @@ def _choose_business_mode(job: int, profile: dict) -> int:
     )
 
 
-def _earliest_start_schedule(profile: dict) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
+def _earliest_start_schedule(
+    profile: dict,
+) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
     """Compute ASAP start times using a topological forward pass on the precedence graph.
 
     Resource constraints are ignored; this gives the theoretical lower bound on each
@@ -251,8 +242,7 @@ def _earliest_start_schedule(profile: dict) -> tuple[dict[int, int], dict[int, i
 
     selected_mode = {job: _choose_business_mode(job, profile) for job in jobs}
     duration_by_job = {
-        job: max(1, int(profile["durations"].get((job, selected_mode[job]), 1)))
-        for job in jobs
+        job: max(1, int(profile["durations"].get((job, selected_mode[job]), 1))) for job in jobs
     }
 
     outgoing = defaultdict(list)
@@ -283,8 +273,7 @@ def _earliest_start_schedule(profile: dict) -> tuple[dict[int, int], dict[int, i
     for job in topo:
         if predecessors[job]:
             start_by_job[job] = max(
-                start_by_job[pred] + duration_by_job[pred]
-                for pred in predecessors[job]
+                start_by_job[pred] + duration_by_job[pred] for pred in predecessors[job]
             )
 
     return start_by_job, duration_by_job, selected_mode
@@ -346,11 +335,15 @@ def build_input_graph(input_path: str) -> go.Figure:
 
     for (res_type, mode_val), color in _JOB_COLORS.items():
         mode_jobs = [
-            job for job in jobs_sorted
+            job
+            for job in jobs_sorted
             if mode_by_job[job] == mode_val
             and (
-                (res_type == "mechanic"    and profile["mechanic_use"].get((job, mode_val), 0) > 0)
-                or (res_type == "technician" and profile["technician_use"].get((job, mode_val), 0) > 0)
+                (res_type == "mechanic" and profile["mechanic_use"].get((job, mode_val), 0) > 0)
+                or (
+                    res_type == "technician"
+                    and profile["technician_use"].get((job, mode_val), 0) > 0
+                )
             )
         ]
         if not mode_jobs:
@@ -425,7 +418,9 @@ def build_input_graph(input_path: str) -> go.Figure:
     fig.update_xaxes(title_text="Time", row=2, col=1)
     fig.update_xaxes(showticklabels=True, row=1, col=1)
     fig.update_yaxes(
-        title_text="Jobs", row=1, col=1,
+        title_text="Jobs",
+        row=1,
+        col=1,
         categoryorder="array",
         categoryarray=[f"Job {job}" for job in reversed(jobs_sorted)],
     )
@@ -487,8 +482,8 @@ def _compute_demand(
 
 # Colors used for each solver in the comparison chart
 _SOLVER_COLORS = {
-    "HiGHS":  "#E83E8C",
-    "SCIP":   "#2d4376",
+    "HiGHS": "#E83E8C",
+    "SCIP": "#2d4376",
     "Stride": "#17BEBB",
 }
 
@@ -531,19 +526,29 @@ def build_comparison_graph(
         x = list(range(len(mech)))
         fig.add_trace(
             go.Scatter(
-                x=x, y=mech, mode="lines", name=solver_name,
+                x=x,
+                y=mech,
+                mode="lines",
+                name=solver_name,
                 line={"color": color, "width": 2},
-                legendgroup=solver_name, showlegend=True,
+                legendgroup=solver_name,
+                showlegend=True,
             ),
-            row=1, col=1,
+            row=1,
+            col=1,
         )
         fig.add_trace(
             go.Scatter(
-                x=x, y=tech, mode="lines", name=solver_name,
+                x=x,
+                y=tech,
+                mode="lines",
+                name=solver_name,
                 line={"color": color, "width": 2},
-                legendgroup=solver_name, showlegend=False,
+                legendgroup=solver_name,
+                showlegend=False,
             ),
-            row=2, col=1,
+            row=2,
+            col=1,
         )
 
     fig.update_layout(
@@ -591,17 +596,10 @@ def build_solution_graph(
         return build_input_graph(input_path)
 
     fallback_mode = {job: _choose_business_mode(job, profile) for job in jobs}
-    selected_mode = {
-        job: int(modes_by_job.get(job, fallback_mode[job]))
-        for job in jobs
-    }
-    start = {
-        job: int(starts_by_job.get(job, 0))
-        for job in jobs
-    }
+    selected_mode = {job: int(modes_by_job.get(job, fallback_mode[job])) for job in jobs}
+    start = {job: int(starts_by_job.get(job, 0)) for job in jobs}
     duration = {
-        job: max(1, int(profile["durations"].get((job, selected_mode[job]), 1)))
-        for job in jobs
+        job: max(1, int(profile["durations"].get((job, selected_mode[job]), 1))) for job in jobs
     }
 
     jobs_sorted = sorted(jobs, key=lambda job_id: (start[job_id], job_id))
@@ -633,11 +631,15 @@ def build_solution_graph(
 
     for (res_type, mode_val), color in _JOB_COLORS.items():
         mode_jobs = [
-            job for job in jobs_sorted
+            job
+            for job in jobs_sorted
             if selected_mode[job] == mode_val
             and (
-                (res_type == "mechanic"    and profile["mechanic_use"].get((job, mode_val), 0) > 0)
-                or (res_type == "technician" and profile["technician_use"].get((job, mode_val), 0) > 0)
+                (res_type == "mechanic" and profile["mechanic_use"].get((job, mode_val), 0) > 0)
+                or (
+                    res_type == "technician"
+                    and profile["technician_use"].get((job, mode_val), 0) > 0
+                )
             )
         ]
         if not mode_jobs:
@@ -713,7 +715,9 @@ def build_solution_graph(
     fig.update_xaxes(title_text="Time", row=2, col=1)
     fig.update_xaxes(showticklabels=True, row=1, col=1)
     fig.update_yaxes(
-        title_text="Jobs", row=1, col=1,
+        title_text="Jobs",
+        row=1,
+        col=1,
         categoryorder="array",
         categoryarray=[f"Job {job}" for job in reversed(jobs_sorted)],
     )
