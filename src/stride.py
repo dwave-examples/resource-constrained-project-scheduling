@@ -36,8 +36,23 @@ UPPER_BOUNDS = [
     102, 136, 181, 105, 194, 111, 140, 185, 143, 209, 200, 207, 182, 205, 208,
 ]
 
-def create_runtime_use_matrices(input_path: str):
+def create_runtime_use_matrices(input_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Parse the MPS file and return per-job-mode runtime and resource-use matrices.
 
+    Reads the resource-capacity constraints from the MPS problem to derive how
+    long each (job, mode) pair runs and how many Mechaniker/Techniker units it
+    consumes per time step.
+
+    Args:
+        input_path: Path to the ``.mps`` instance file.
+
+    Returns:
+        A tuple containing:
+
+        - np.ndarray: array of job-mode runtimes.
+        - np.ndarray: array of Mechaniker consumption per job-mode.
+        - np.ndarray: array of Techniker consumption per job-mode.
+    """
     _, problem = pulp.LpProblem.fromMPS(input_path)
 
     data = problem.to_dict()
@@ -116,7 +131,20 @@ def create_runtime_use_matrices(input_path: str):
 
     return runtimes_matrix, rm_use_matrix, rt_use_matrix
 
-def create_precedence_pairs(input_path: str):
+def create_precedence_pairs(input_path: str) -> list[tuple[int, int]]:
+    """Extract the job precedence pairs from the MPS instance.
+
+    Parses the ``prec`` constraints from the MPS file and returns each
+    predecessor–successor relationship as a ``(j1, j2)`` tuple meaning job
+    ``j1`` must finish before job ``j2`` starts.
+
+    Args:
+        input_path: Path to the ``.mps`` instance file.
+
+    Returns:
+        A list of ``(j1, j2)`` integer tuples (1-indexed job numbers) for
+        every precedence constraint in the model.
+    """
     _, problem = pulp.LpProblem.fromMPS(input_path)
     data = problem.to_dict()
 
@@ -134,13 +162,35 @@ def create_precedence_pairs(input_path: str):
     return precedence_pairs
 
 def create_model(
-    lower_bounds,
-    upper_bounds,
-    runtimes_matrix,
-    rm_use_matrix,
-    rt_use_matrix,
-    precedence_pairs,
-):
+    lower_bounds: list[int],
+    upper_bounds: list[int],
+    runtimes_matrix: np.ndarray,
+    rm_use_matrix: np.ndarray,
+    rt_use_matrix: np.ndarray,
+    precedence_pairs: list[tuple[int, int]],
+) -> tuple[Model, np.ndarray, np.ndarray]:
+    """Build the D-Wave nonlinear optimization model for the RCPSP instance.
+
+    Constructs a ``dwave.optimization.Model`` using integer decision variables
+    for job start times and modes. Resource feasibility is enforced via an
+    accumulate-zip sweep over sorted start/end events. The objective minimises
+    ``100 * R_Mechaniker + 51 * R_Techniker``.
+
+    Args:
+        lower_bounds: Per-job lower bounds on start times (length 30).
+        upper_bounds: Per-job upper bounds on start times (length 30).
+        runtimes_matrix: ``(30, 3)`` array of job-mode durations.
+        rm_use_matrix: ``(30, 3)`` array of Mechaniker consumption per job-mode.
+        rt_use_matrix: ``(30, 3)`` array of Techniker consumption per job-mode.
+        precedence_pairs: List of ``(j1, j2)`` tuples encoding precedence constraints.
+
+    Returns:
+        A tuple containing:
+
+        - Model: The constructed D-Wave optimization model.
+        - np.ndarray: The model's start time variables as a (30,) array.
+        - np.ndarray: The model's mode variables as a (30,) array.
+    """
     # accumulate zip formulation
     model = Model()
 
@@ -219,13 +269,49 @@ def create_model(
 
 @lru_cache(maxsize=4)
 def _preprocessed_data(input_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tuple[int, int]]]:
+    """Return cached runtime matrices and precedence pairs for the given instance.
+
+    Results are memoised so repeated calls with the same path avoid re-parsing
+    the MPS file.
+
+    Args:
+        input_path: Path to the ``.mps`` instance file.
+
+    Returns:
+        A tuple containing:
+
+        - np.ndarray: array of job-mode runtimes.
+        - np.ndarray: array of Mechaniker consumption per job-mode.
+        - np.ndarray: array of Techniker consumption per job-mode.
+        - list[tuple[int, int]]: list of precedence pairs.
+    """
     runtimes_matrix, rm_use_matrix, rt_use_matrix = create_runtime_use_matrices(input_path)
     precedence_pairs = create_precedence_pairs(input_path)
     return runtimes_matrix, rm_use_matrix, rt_use_matrix, precedence_pairs
 
 
 def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
-    """Run the Stride nonlinear formulation once and return comparable result metadata."""
+    """Run the Stride nonlinear formulation once and return comparable result metadata.
+
+    Builds the D-Wave nonlinear model, submits it to ``LeapHybridNLSampler``
+    with the given time limit, and extracts the resulting schedule.
+
+    Args:
+        time_limit: Maximum solver wall-clock time in seconds.
+        input_path: Path to the ``.mps`` instance file.
+
+    Returns:
+        A dict with keys:
+
+        - ``solver`` (str): ``"Stride"``.
+        - ``status`` (str): ``"Completed"`` on success, or an error/unavailability message.
+        - ``energy`` (float | None): Objective value, or ``None`` on failure.
+        - ``ok`` (bool): ``True`` if all constraints are satisfied.
+        - ``starts`` (dict[int, int]): Mapping of 1-indexed job number to start time
+          (absent on failure).
+        - ``modes`` (dict[int, int]): Mapping of 1-indexed job number to selected mode
+          (1-indexed, absent on failure).
+    """
     if LeapHybridNLSampler is None:
         return {
             "solver": "Stride",

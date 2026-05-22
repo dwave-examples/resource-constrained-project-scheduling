@@ -32,7 +32,19 @@ SOLVER_RUNNERS = {
 
 
 def compare_formulations(selection: list[str], time_limit: float, runs: int, input_path: str) -> list[dict]:
-    """Run selected formulations repeatedly and return run-level rows."""
+    """Run selected solver formulations repeatedly and collect run-level results.
+
+    Args:
+        selection: List of solver value strings (from ``SolverType``).
+        time_limit: Maximum runtime per solver run in seconds.
+        runs: Number of repeated runs per solver.
+        input_path: Path to the MPS-format problem file.
+
+    Returns:
+        A list of result dictionaries, one per (solver, run) pair, each containing
+        ``"formulation"``, ``"run"``, ``"status"``, ``"energy"``, ``"ok"``,
+        ``"starts"``, and ``"modes"`` keys.
+    """
     selected_types = sorted({SolverType(int(value)) for value in selection}, key=lambda entry: entry.value)
 
     rows = []
@@ -56,7 +68,16 @@ def compare_formulations(selection: list[str], time_limit: float, runs: int, inp
 
 
 def summarize_runs(rows: list[dict]) -> list[dict]:
-    """Aggregate run-level rows into one summary row per formulation."""
+    """Aggregate run-level result rows into one summary row per formulation.
+
+    Args:
+        rows: Run-level result rows as returned by ``compare_formulations``.
+
+    Returns:
+        A list of summary dictionaries sorted by formulation name, each containing
+        ``"formulation"``, ``"runs"``, ``"ok_runs"``, ``"best_energy"``, and
+        ``"avg_energy"`` keys.
+    """
     groups: dict[str, list[dict]] = {}
     for row in rows:
         groups.setdefault(row["formulation"], []).append(row)

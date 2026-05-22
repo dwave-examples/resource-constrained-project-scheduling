@@ -23,7 +23,20 @@ from pyscipopt import Model
 
 
 def _extract_assignment_scip(model: Any) -> tuple[dict[int, int], dict[int, int]]:
-    """Extract selected x_(job,mode,start) assignments from a SCIP solution."""
+    """Extract the start-time and mode assignment from a solved SCIP model.
+
+    Reads all variables named ``x_<job>_<mode>_<start>`` and returns the
+    assignment with value > 0.5 for each job.
+
+    Args:
+        model: A solved ``pyscipopt.Model`` instance.
+
+    Returns:
+        A tuple containing:
+
+        - dict[int, int]: Start time keyed by job ID.
+        - dict[int, int]: Execution mode keyed by job ID.
+    """
     pattern = re.compile(r"x_(\d+)_(\d+)_(\d+)")
     best_choice: dict[int, tuple[float, int, int]] = {}
 
@@ -49,7 +62,22 @@ def _extract_assignment_scip(model: Any) -> tuple[dict[int, int], dict[int, int]
 
 
 def solve_scip(time_limit: float, input_path: str) -> dict[str, Any]:
-    """Run the SCIP MILP formulation once and return comparable result metadata."""
+    """Run the SCIP MILP formulation once and return comparable result metadata.
+
+    Args:
+        time_limit: Maximum solver runtime in seconds.
+        input_path: Path to the MPS-format problem file.
+
+    Returns:
+        A dictionary with keys:
+
+        - ``"solver"``: solver label string.
+        - ``"status"``: SCIP status string.
+        - ``"energy"``: best objective value found, or ``None`` if infeasible.
+        - ``"ok"``: ``True`` if at least one feasible solution was found.
+        - ``"starts"``: start time keyed by job ID (empty if infeasible).
+        - ``"modes"``: execution mode keyed by job ID (empty if infeasible).
+    """
     if Model is None:
         return {
             "solver": "SCIP (MILP)",

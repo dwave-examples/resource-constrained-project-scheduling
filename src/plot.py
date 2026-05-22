@@ -35,7 +35,21 @@ _MECHANIC_LINE_COLOR = "#3886E3"
 _TECHNICIAN_LINE_COLOR = "#EF6B0D"
 
 def _parse_mps_structure(input_path: str) -> dict:
-    """Parse MPS sections to extract precedence, resource usage, and capacities."""
+    """Parse an MPS file to extract jobs, precedences, resource usage, and capacities.
+
+    Args:
+        input_path: Path to the MPS-format problem file.
+
+    Returns:
+        A dictionary with keys:
+
+        - ``"jobs"``: sorted list of job IDs.
+        - ``"edges"``: sorted list of ``(src, dst)`` precedence pairs.
+        - ``"durations"``: mapping of ``(job, mode)`` → duration in time units.
+        - ``"mechanic_use"``: mapping of ``(job, mode)`` → mechanic units consumed.
+        - ``"technician_use"``: mapping of ``(job, mode)`` → technician units consumed.
+        - ``"capacities"``: dict with ``"Mechaniker"`` and ``"Techniker"`` upper bounds.
+    """
     path = Path(input_path)
     if not path.exists() or not path.is_file():
         return {
@@ -168,7 +182,18 @@ def _parse_mps_structure(input_path: str) -> dict:
 
 
 def _choose_business_mode(job: int, profile: dict) -> int:
-    """Pick a representative execution mode per job for executive-style visuals."""
+    """Pick a representative execution mode for a job for display purposes.
+
+    Selects the mode with the shortest duration, breaking ties by lowest total
+    resource consumption, then by lowest mode number.
+
+    Args:
+        job: Job ID.
+        profile: Parsed MPS structure as returned by ``_parse_mps_structure``.
+
+    Returns:
+        The selected mode number (1-indexed).
+    """
     durations = profile["durations"]
     mech = profile["mechanic_use"]
     tech = profile["technician_use"]
@@ -205,7 +230,22 @@ def _choose_business_mode(job: int, profile: dict) -> int:
 
 
 def _earliest_start_schedule(profile: dict) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
-    """Compute precedence-feasible earliest starts with one representative mode per job."""
+    """Compute ASAP start times using a topological forward pass on the precedence graph.
+
+    Resource constraints are ignored; this gives the theoretical lower bound on each
+    job's start time. One representative mode per job is chosen by
+    ``_choose_business_mode``.
+
+    Args:
+        profile: Parsed MPS structure as returned by ``_parse_mps_structure``.
+
+    Returns:
+        A tuple containing:
+
+        - dict[int, int]: Start time keyed by job ID.
+        - dict[int, int]: Duration keyed by job ID.
+        - dict[int, int]: Selected mode keyed by job ID.
+    """
     jobs = profile["jobs"]
     edges = profile["edges"]
 
@@ -251,7 +291,18 @@ def _earliest_start_schedule(profile: dict) -> tuple[dict[int, int], dict[int, i
 
 
 def build_input_graph(input_path: str) -> go.Figure:
-    """Build an executive-style view with timeline and resource loading."""
+    """Build a two-subplot input view: ASAP timeline and resource demand profile.
+
+    The timeline ignores resource limits and shows the earliest-possible schedule.
+    The demand subplot shows per-timestep mechanic and technician consumption
+    under that schedule.
+
+    Args:
+        input_path: Path to the MPS-format problem file.
+
+    Returns:
+        A Plotly figure with a Gantt chart (row 1) and resource demand lines (row 2).
+    """
     profile = _parse_mps_structure(input_path)
     jobs = profile["jobs"]
 
@@ -384,7 +435,16 @@ def build_input_graph(input_path: str) -> go.Figure:
 
 
 def parse_mps_structure(input_path: str) -> dict:
-    """Public wrapper for parsed MPS structure used by plotting and callbacks."""
+    """Return the parsed MPS problem structure for callers outside this module.
+
+    Args:
+        input_path: Path to the MPS-format problem file.
+
+    Returns:
+        A dictionary with keys ``"jobs"``, ``"edges"``, ``"durations"``,
+        ``"mechanic_use"``, ``"technician_use"``, and ``"capacities"``.
+        See ``_parse_mps_structure`` for full details.
+    """
     return _parse_mps_structure(input_path)
 
 
@@ -393,7 +453,20 @@ def _compute_demand(
     starts_by_job: dict[int, int],
     modes_by_job: dict[int, int],
 ) -> tuple[list[float], list[float], int]:
-    """Compute per-timestep mechanic and technician demand arrays from a schedule."""
+    """Compute per-timestep resource demand arrays from a solver schedule.
+
+    Args:
+        profile: Parsed MPS structure as returned by ``_parse_mps_structure``.
+        starts_by_job: Start time keyed by job ID.
+        modes_by_job: Execution mode keyed by job ID.
+
+    Returns:
+        A tuple containing:
+
+        - list[float]: Mechanic demand at each timestep.
+        - list[float]: Technician demand at each timestep.
+        - int: Total horizon (length of both demand lists).
+    """
     jobs = profile["jobs"]
     fallback = {job: _choose_business_mode(job, profile) for job in jobs}
     sel_mode = {job: int(modes_by_job.get(job, fallback[job])) for job in jobs}
@@ -493,9 +566,19 @@ def build_solution_graph(
     modes_by_job: dict[int, int] | None,
     title: str,
 ) -> go.Figure:
-    """Build timeline and resource graph from a solver-provided schedule.
+    """Build a two-subplot solution view: solver timeline and resource demand profile.
 
-    If a schedule is unavailable, returns the baseline input graph.
+    Falls back to ``build_input_graph`` if no schedule is available.
+
+    Args:
+        input_path: Path to the MPS-format problem file.
+        starts_by_job: Start time keyed by job ID, or ``None`` if no solution.
+        modes_by_job: Execution mode keyed by job ID, or ``None`` if no solution.
+        title: Figure title displayed above the chart.
+
+    Returns:
+        A Plotly figure with a Gantt chart (row 1) and resource demand lines (row 2),
+        including a dashed capacity line and idle-capacity fill on the demand subplot.
     """
     if not starts_by_job or not modes_by_job:
         fig = build_input_graph(input_path)

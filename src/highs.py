@@ -23,7 +23,20 @@ import highspy as hs
 
 
 def _extract_assignment_highs(highs_model: Any) -> tuple[dict[int, int], dict[int, int]]:
-    """Extract selected x_(job,mode,start) assignments from a HiGHS solution."""
+    """Extract the start-time and mode assignment from a solved HiGHS model.
+
+    Reads all variables named ``x_<job>_<mode>_<start>`` and returns the
+    assignment with value > 0.5 for each job.
+
+    Args:
+        highs_model: A solved ``highspy.Highs`` instance.
+
+    Returns:
+        A tuple containing:
+
+        - dict[int, int]: Start time keyed by job ID.
+        - dict[int, int]: Execution mode keyed by job ID.
+    """
     names = []
     values = []
 
@@ -64,7 +77,22 @@ def _extract_assignment_highs(highs_model: Any) -> tuple[dict[int, int], dict[in
 
 
 def solve_highs(time_limit: float, input_path: str) -> dict[str, Any]:
-    """Run the HiGHS MILP formulation once and return comparable result metadata."""
+    """Run the HiGHS MILP formulation once and return comparable result metadata.
+
+    Args:
+        time_limit: Maximum solver runtime in seconds.
+        input_path: Path to the MPS-format problem file.
+
+    Returns:
+        A dictionary with keys:
+
+        - ``"solver"``: solver label string.
+        - ``"status"``: HiGHS model status string.
+        - ``"energy"``: best objective value found, or ``None`` if infeasible.
+        - ``"ok"``: ``True`` if a finite objective was obtained.
+        - ``"starts"``: start time keyed by job ID (empty if infeasible).
+        - ``"modes"``: execution mode keyed by job ID (empty if infeasible).
+    """
     if hs is None:
         return {
             "solver": "HiGHS (MILP)",

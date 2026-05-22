@@ -21,6 +21,7 @@ from dash import ctx, html
 from dash import MATCH
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
+import plotly.graph_objects as go
 
 from demo_configs import KNOWN_OPTIMA
 from demo_interface import (
@@ -73,15 +74,15 @@ def toggle_left_column(collapse_trigger: int, to_collapse_class: str) -> tuple[s
         Input("input-file-select", "value"),
     ],
 )
-def render_initial_state(input_file: str) -> html.Div:
-    """Runs on load and any time the value of the slider is updated.
-        Add `prevent_initial_call=True` to skip on load runs.
+def render_initial_state(input_file: str) -> go.Figure:
+    """Build the input-tab figure on load and whenever the selected file changes.
 
     Args:
-        input_file: Selected input file path.
+        input_file: Path to the selected MPS input file.
 
     Returns:
-        The content of the input tab.
+        A Plotly figure showing the ASAP schedule and resource demand profile
+        for the selected problem instance.
     """
     selected_input = input_file or ""
     return build_input_graph(selected_input)
@@ -247,7 +248,14 @@ def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
 
 
 def _solver_tab_class(rows: list[dict]) -> str:
-    """Return the CSS class for a solver tab based on whether any run succeeded."""
+    """Return the CSS class for a solver tab based on run success.
+
+    Args:
+        rows: Run-level result rows for the solver.
+
+    Returns:
+        ``"tab-success"`` if any row has ``ok=True``, otherwise ``"tab-fail"``.
+    """
     return "tab-success" if any(row.get("ok") for row in rows) else "tab-fail"
 
 

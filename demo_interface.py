@@ -19,6 +19,7 @@ from pathlib import Path
 
 from dash import dcc, html
 import dash_mantine_components as dmc
+import plotly.graph_objects as go
 
 from demo_configs import (
     DESCRIPTION,
@@ -300,12 +301,28 @@ def generate_run_buttons() -> html.Div:
 
 
 def solver_not_selected_panel(solver_name: str) -> html.Div:
-    """Placeholder content for a solver tab when the solver was not selected."""
+    """Placeholder content for a solver tab when the solver was not selected.
+
+    Args:
+        solver_name: Human-readable name of the solver (e.g. ``"HiGHS"``).
+
+    Returns:
+        An html.Div containing a short explanatory message.
+    """
     return html.Div([html.P(f"{solver_name} was not selected.")])
 
 
-def solver_solution_panel(has_solution: bool, figure) -> dcc.Graph | html.P:
-    """Return a graph of the solver's best solution, or a 'no solution' message."""
+def solver_solution_panel(has_solution: bool, figure: go.Figure) -> dcc.Graph | html.P:
+    """Return a graph of the solver's best solution, or a 'no solution' message.
+
+    Args:
+        has_solution: Whether the solver produced a feasible schedule.
+        figure: A Plotly figure to display when ``has_solution`` is ``True``.
+
+    Returns:
+        A dcc.Graph wrapping the figure, or an html.P placeholder if no solution
+        was found within the time limit.
+    """
     if has_solution:
         return dcc.Graph(figure=figure, config={"displayModeBar": False}, responsive=True)
     return html.H2(
@@ -315,12 +332,24 @@ def solver_solution_panel(has_solution: bool, figure) -> dcc.Graph | html.P:
 
 
 def waiting_panel() -> html.Div:
-    """Placeholder shown on the Results tab while solvers are still running."""
+    """Placeholder shown on the Results tab while solvers are still running.
+
+    Returns:
+        An html.Div containing a short status message.
+    """
     return html.Div([html.P("Waiting for solvers to finish...")])
 
 
-def comparison_panel(figure) -> dcc.Graph | html.H4:
-    """Wrap the comparison Plotly figure in a dcc.Graph, or show a fallback message."""
+def comparison_panel(figure: go.Figure | None) -> dcc.Graph | html.H4:
+    """Wrap the comparison Plotly figure in a dcc.Graph, or show a fallback message.
+
+    Args:
+        figure: A Plotly figure to display, or ``None`` if no solutions are available.
+
+    Returns:
+        A dcc.Graph wrapping the figure, or an html.H4 placeholder if ``figure`` is
+        ``None``.
+    """
     if figure is None:
         return html.H4(
             "No solutions found to compare.",
@@ -337,7 +366,18 @@ def comparison_summary_table(
     """Build the highlighted Comparison Summary table.
 
     Rows with 0 OK runs are highlighted red; the row with the lowest best
-    energy is highlighted teal.
+    energy is highlighted teal; known-optimal values are annotated.
+
+    Args:
+        summary_rows: Aggregated result rows as returned by ``summarize_runs``.
+        min_energy: The lowest best-energy value across all solvers, used for
+            row highlighting. Pass ``None`` if no feasible solutions exist.
+        known_optimal: The known optimal objective value for the instance, or
+            ``None`` if unknown.
+
+    Returns:
+        An html.Table with styled rows and an ``(optimal)`` annotation where
+        applicable.
     """
     def fmt_energy(val: object) -> str:
         if val is None:
@@ -376,8 +416,18 @@ def comparison_summary_table(
     )
 
 
-def results_layout(comparison_element, summary_table: html.Table) -> html.Div:
-    """Results tab content: comparison graph on the left, summary table on the right."""
+def results_layout(comparison_element: dcc.Graph | html.H4, summary_table: html.Table) -> html.Div:
+    """Build the Results tab content with a comparison graph and summary table.
+
+    Args:
+        comparison_element: A dcc.Graph or placeholder element for the comparison
+            chart, displayed on the left.
+        summary_table: The html.Table built by ``comparison_summary_table``,
+            displayed on the right.
+
+    Returns:
+        An html.Div with a flex layout containing the comparison element and table.
+    """
     return html.Div(
         className="results-layout",
         children=[
