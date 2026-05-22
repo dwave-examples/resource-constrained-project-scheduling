@@ -287,11 +287,27 @@ def build_input_graph(input_path: str) -> go.Figure:
             y=[f"Job {job}" for job in jobs_sorted],
             base=[start_by_job[job] for job in jobs_sorted],
             orientation="h",
-            marker={"color": "#2d4376"},
-            customdata=[mode_by_job[job] for job in jobs_sorted],
+            marker={
+                "color": [
+                    "#1f77b4" if profile["mechanic_use"].get((job, mode_by_job[job]), 0) > 0
+                    else "#ff7f0e"
+                    for job in jobs_sorted
+                ]
+            },
+            customdata=[
+                [
+                    mode_by_job[job],
+                    profile["mechanic_use"].get((job, mode_by_job[job]), 0),
+                    profile["technician_use"].get((job, mode_by_job[job]), 0),
+                    duration_by_job[job],
+                ]
+                for job in jobs_sorted
+            ],
             hovertemplate=(
-                "<b>%{y}</b><br>Start: %{base}<br>Duration: %{x}<br>"
-                "Mode: %{customdata}<extra></extra>"
+                "<b>%{y}</b><br>Start: %{base}<br>Duration: %{customdata[3]}<br>"
+                "Mode: %{customdata[0]}<br>"
+                "Mechanics: %{customdata[1]}<br>"
+                "Technicians: %{customdata[2]}<extra></extra>"
             ),
             name="Planned Job Window",
             showlegend=False,
@@ -335,6 +351,7 @@ def build_input_graph(input_path: str) -> go.Figure:
         height=760,
     )
     fig.update_xaxes(title_text="Time", row=2, col=1)
+    fig.update_xaxes(showticklabels=True, row=1, col=1)
     fig.update_yaxes(title_text="Jobs", row=1, col=1, autorange="reversed")
     fig.update_yaxes(title_text="Resource Units", row=2, col=1)
 
@@ -413,11 +430,27 @@ def build_solution_graph(
             y=[f"Job {job}" for job in jobs_sorted],
             base=[start[job] for job in jobs_sorted],
             orientation="h",
-            marker={"color": "#2d4376"},
-            customdata=[selected_mode[job] for job in jobs_sorted],
+            marker={
+                "color": [
+                    "#1f77b4" if profile["mechanic_use"].get((job, selected_mode[job]), 0) > 0
+                    else "#ff7f0e"
+                    for job in jobs_sorted
+                ]
+            },
+            customdata=[
+                [
+                    selected_mode[job],
+                    profile["mechanic_use"].get((job, selected_mode[job]), 0),
+                    profile["technician_use"].get((job, selected_mode[job]), 0),
+                    duration[job],
+                ]
+                for job in jobs_sorted
+            ],
             hovertemplate=(
-                "<b>%{y}</b><br>Start: %{base}<br>Duration: %{x}<br>"
-                "Mode: %{customdata}<extra></extra>"
+                "<b>%{y}</b><br>Start: %{base}<br>Duration: %{customdata[3]}<br>"
+                "Mode: %{customdata[0]}<br>"
+                "Mechanics: %{customdata[1]}<br>"
+                "Technicians: %{customdata[2]}<extra></extra>"
             ),
             showlegend=False,
         ),
@@ -459,6 +492,7 @@ def build_solution_graph(
         height=760,
     )
     fig.update_xaxes(title_text="Time", row=2, col=1)
+    fig.update_xaxes(showticklabels=True, row=1, col=1)
     fig.update_yaxes(title_text="Jobs", row=1, col=1, autorange="reversed")
     fig.update_yaxes(title_text="Resource Units", row=2, col=1)
 

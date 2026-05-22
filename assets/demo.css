@@ -33,6 +33,9 @@ custom CSS can be added below.
     justify-content: center;
     align-items: center;
     height: 100%;
+    width: 100%;
+    max-width: 60rem;
+    margin: auto;
 }
 
   /****************************/
@@ -51,3 +54,17 @@ custom CSS can be added below.
     border-style: solid;
 }
 
+#input,
+#highs-results,
+#scip-results,
+#stride-results {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.dash-graph {
+    width: 100%;
+}

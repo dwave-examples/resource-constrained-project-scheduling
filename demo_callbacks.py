@@ -80,6 +80,7 @@ def render_initial_state(input_file: str) -> html.Div:
     return dcc.Graph(
         figure=build_input_graph(selected_input),
         config={"displayModeBar": False},
+        responsive=True,
     )
 
 
@@ -239,6 +240,7 @@ def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
                 title=f"{label} Best Solution View",
             ),
             config={"displayModeBar": False},
+            responsive=True,
         )
         if has_solution
         else html.P(
@@ -246,7 +248,7 @@ def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
             style={"color": "#888", "fontStyle": "italic", "padding": "1rem 0"},
         )
     )
-    return html.Div([graph_section])
+    return graph_section
 
 
 def _solver_tab_class(rows: list[dict]) -> str:
@@ -483,7 +485,6 @@ def run_stride(
         Input("scip-store", "data"),
         Input("stride-store", "data"),
         State("run-button", "n_clicks"),
-        State("solver-selection", "value"),
         State("input-file-select", "value"),
     ],
     prevent_initial_call=True,
@@ -493,7 +494,6 @@ def render_aggregate_results(
     scip_store: dict,
     stride_store: dict,
     run_click: int,
-    solver_selection: list[str],
     input_file: str,
 ) -> tuple[html.Div, bool, str]:
     """Build the Results summary tab from completed solver stores.
@@ -506,7 +506,6 @@ def render_aggregate_results(
         scip_store: Latest data stored by the SCIP callback.
         stride_store: Latest data stored by the Stride callback.
         run_click: Number of times the run button has been clicked.
-        solver_selection: Currently selected solver values.
         input_file: Path to the selected input file.
 
     Returns:
@@ -516,7 +515,6 @@ def render_aggregate_results(
         - bool: Whether the Results tab should remain disabled.
         - str: Results tab label.
     """
-    selection = solver_selection or []
     selected_input = input_file or ""
 
     rows: list[dict] = []
