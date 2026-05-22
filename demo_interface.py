@@ -299,62 +299,98 @@ def generate_run_buttons() -> html.Div:
     )
 
 
-def generate_table(table_data: dict[str, list]) -> html.Table:
-    """Generate a table containing table_data.
+def solver_not_selected_panel(solver_name: str) -> html.Div:
+    """Placeholder content for a solver tab when the solver was not selected."""
+    return html.Div([html.P(f"{solver_name} was not selected.")])
 
-    Args:
-        table_data: A dictionary of table header keys and table column values.
 
-    Returns:
-        An HTML table containing table_data.
+def solver_solution_panel(has_solution: bool, figure) -> dcc.Graph | html.P:
+    """Return a graph of the solver's best solution, or a 'no solution' message."""
+    if has_solution:
+        return dcc.Graph(figure=figure, config={"displayModeBar": False}, responsive=True)
+    return html.P(
+        "No solution found within the given time limit.",
+        style={"color": "#888", "fontStyle": "italic", "padding": "1rem 0"},
+    )
+
+
+def waiting_panel() -> html.Div:
+    """Placeholder shown on the Results tab while solvers are still running."""
+    return html.Div([html.P("Waiting for solvers to finish...")])
+
+
+def comparison_panel(figure) -> dcc.Graph | html.P:
+    """Wrap the comparison Plotly figure in a dcc.Graph, or show a fallback message."""
+    if figure is None:
+        return html.P(
+            "No solutions found to compare.",
+            style={"color": "#888", "fontStyle": "italic"},
+        )
+    return dcc.Graph(figure=figure, config={"displayModeBar": False}, responsive=True)
+
+
+def comparison_summary_table(
+    summary_rows: list[dict],
+    min_energy: int | float | None,
+    known_optimal: int | float | None,
+) -> html.Table:
+    """Build the highlighted Comparison Summary table.
+
+    Rows with 0 OK runs are highlighted red; the row with the lowest best
+    energy is highlighted teal.
     """
-    table_columns = table_data.values()
-    num_rows = len(next(iter(table_columns)))
+    def fmt_energy(val: object) -> str:
+        if val is None:
+            return "n/a"
+        s = str(val)
+        if known_optimal is not None and val == known_optimal:
+            return f"{s} (optimal)"
+        return s
 
+    def row_bg(row: dict) -> dict:
+        if row["ok_runs"] == 0:
+            return {"backgroundColor": "rgb(245 118 119 / 36%)"}
+        if min_energy is not None and row["best_energy"] == min_energy:
+            return {"backgroundColor": "rgb(23 190 187 / 42%)"}
+        return {}
+
+    headers = ["Formulation", "Runs", "OK Runs", "Best Energy", "Avg Energy"]
     return html.Table(
         className="problem-details-table",
         children=[
-            html.Thead(html.Tr([html.Th(table_header) for table_header in table_data.keys()])),
-            html.Tbody(
-                [
-                    html.Tr(
-                        [
-                            html.Td(column[i]) for column in table_columns
-                        ]
-                    ) for i in range(num_rows)
-                ]
-            ),
+            html.Thead(html.Tr([html.Th(h) for h in headers])),
+            html.Tbody([
+                html.Tr(
+                    style=row_bg(row),
+                    children=[
+                        html.Td(str(row["formulation"])),
+                        html.Td(str(row["runs"])),
+                        html.Td(str(row["ok_runs"])),
+                        html.Td(fmt_energy(row["best_energy"])),
+                        html.Td(str(row["avg_energy"])),
+                    ],
+                )
+                for row in summary_rows
+            ]),
         ],
     )
 
 
-def problem_details(index: int) -> html.Div:
-    """Generate the problem details section.
-
-    Args:
-        index: Unique element id to differentiate matching elements. Must be different from left
-            column collapse button.
-
-    Returns:
-        Div containing a collapsable table.
-    """
+def results_layout(comparison_element, summary_table: html.Table) -> html.Div:
+    """Results tab content: comparison graph on the left, summary table on the right."""
     return html.Div(
-        id={"type": "to-collapse-class", "index": index},
-        className="details-collapse-wrapper collapsed",
+        style={"display": "flex", "gap": "2rem", "alignItems": "flex-start"},
         children=[
-            # Problem details collapsible button and header
-            html.Button(
-                id={"type": "collapse-trigger", "index": index},
-                className="details-collapse",
-                children=[
-                    html.H5("Problem Details"),
-                    html.Div(className="collapse-arrow"),
-                ],
-                **{"aria-expanded": "true"},
+            html.Div(
+                style={"flex": "1 1 0", "minWidth": 0},
+                children=comparison_element,
             ),
             html.Div(
-                className="details-to-collapse",
-                id="problem-details",
+                style={"flex": "0 0 auto"},
+                children=[
+                    html.H3("Comparison Summary"),
+                    summary_table,
+                ],
             ),
         ],
     )
@@ -499,7 +535,12 @@ def create_interface() -> html.Div:
                                                         type="circle",
                                                         color=THEME_COLOR,
                                                         # A Dash callback (in app.py) will generate content in the Div below
-                                                        children=html.Div(id="input"),
+                                                        children=html.Div(
+                                                            id="input",
+                                                            children=dcc.Graph(
+                                                                id="input-graph", config={"displayModeBar": False}, responsive=True
+                                                            )
+                                                        ),
                                                     ),
                                                 ]
                                             )

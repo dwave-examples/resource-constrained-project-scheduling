@@ -17,13 +17,20 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import dash
-from dash import ctx, dcc, html
+from dash import ctx, html
 from dash import MATCH
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 
 from demo_configs import KNOWN_OPTIMA
-from demo_interface import generate_table
+from demo_interface import (
+    comparison_panel,
+    comparison_summary_table,
+    results_layout,
+    solver_not_selected_panel,
+    solver_solution_panel,
+    waiting_panel,
+)
 from src.demo_enums import SolverType
 from src.plot import build_input_graph, build_solution_graph, build_comparison_graph
 from src.demo_runner import compare_formulations, summarize_runs
@@ -61,7 +68,7 @@ def toggle_left_column(collapse_trigger: int, to_collapse_class: str) -> tuple[s
 
 
 @dash.callback(
-    Output("input", "children"),
+    Output("input-graph", "figure"),
     inputs=[
         Input("input-file-select", "value"),
     ],
@@ -77,11 +84,7 @@ def render_initial_state(input_file: str) -> html.Div:
         The content of the input tab.
     """
     selected_input = input_file or ""
-    return dcc.Graph(
-        figure=build_input_graph(selected_input),
-        config={"displayModeBar": False},
-        responsive=True,
-    )
+    return build_input_graph(selected_input)
 
 
 # ---------------------------------------------------------------------------
@@ -231,24 +234,16 @@ def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
         key=lambda row: row["energy"] if isinstance(row.get("energy"), (int, float)) else float("inf"),
     )
     has_solution = bool(best.get("starts")) and bool(best.get("modes"))
-    graph_section = (
-        dcc.Graph(
-            figure=build_solution_graph(
-                input_path,
-                best.get("starts", {}),
-                best.get("modes", {}),
-                title=f"{label} Best Solution View",
-            ),
-            config={"displayModeBar": False},
-            responsive=True,
+    figure = (
+        build_solution_graph(
+            input_path,
+            best.get("starts", {}),
+            best.get("modes", {}),
+            title=f"{label} Best Solution View",
         )
-        if has_solution
-        else html.P(
-            "No solution found within the given time limit.",
-            style={"color": "#888", "fontStyle": "italic", "padding": "1rem 0"},
-        )
+        if has_solution else None
     )
-    return graph_section
+    return solver_solution_panel(has_solution, figure)
 
 
 def _solver_tab_class(rows: list[dict]) -> str:
@@ -310,7 +305,7 @@ def run_highs(
     """
     if str(SolverType.HIGHS.value) not in (solver_selection or []):
         return RunHiGHSReturn(
-            highs_results=html.Div([html.P("HiGHS was not selected.")]),
+            highs_results=solver_not_selected_panel("HiGHS"),
             highs_store={"run_click": run_click, "rows": []},
             highs_tab_label="HiGHS",
             highs_tab_disabled=False,
@@ -380,7 +375,7 @@ def run_scip(
     """
     if str(SolverType.SCIP.value) not in (solver_selection or []):
         return RunSCIPReturn(
-            scip_results=html.Div([html.P("SCIP was not selected.")]),
+            scip_results=solver_not_selected_panel("SCIP"),
             scip_store={"run_click": run_click, "rows": []},
             scip_tab_label="SCIP",
             scip_tab_disabled=False,
@@ -450,7 +445,7 @@ def run_stride(
     """
     if str(SolverType.STRIDE.value) not in (solver_selection or []):
         return RunStrideReturn(
-            stride_results=html.Div([html.P("Stride was not selected.")]),
+            stride_results=solver_not_selected_panel("Stride"),
             stride_store={"run_click": run_click, "rows": []},
             stride_tab_label="Stride",
             stride_tab_disabled=False,
@@ -527,11 +522,7 @@ def render_aggregate_results(
             store_rows[name] = []
 
     if not rows:
-        return (
-            html.Div([html.P("Waiting for solvers to finish...")]),
-            True,
-            "Results",
-        )
+        return waiting_panel(), True, "Results"
 
     summary_rows = summarize_runs(rows)
     known_optimal = KNOWN_OPTIMA.get(selected_input)
@@ -547,69 +538,14 @@ def render_aggregate_results(
             modes  = {int(k): v for k, v in best["modes"].items()}
             solver_schedules[name] = (starts, modes)
 
-    def fmt_best_energy(val: object) -> str:
-        if val is None:
-            return "n/a"
-        s = str(val)
-        if known_optimal is not None and val == known_optimal:
-            return f"{s} (optimal)"
-        return s
-
-    # Determine row highlight colours for the summary table.
     ok_energies = [
         row["best_energy"] for row in summary_rows
         if row["ok_runs"] > 0 and row["best_energy"] is not None
     ]
     min_energy = min(ok_energies) if ok_energies else None
 
-    def row_style(row: dict) -> dict:
-        if row["ok_runs"] == 0:
-            return {"backgroundColor": "rgb(245 118 119 / 36%)"}
-        if min_energy is not None and row["best_energy"] == min_energy:
-            return {"backgroundColor": "rgb(23 190 187 / 42%)"}
-        return {}
-
-    headers = ["Formulation", "Runs", "OK Runs", "Best Energy", "Avg Energy"]
-    summary_table = html.Table(
-        className="problem-details-table",
-        children=[
-            html.Thead(html.Tr([html.Th(h) for h in headers])),
-            html.Tbody([
-                html.Tr(
-                    style=row_style(row),
-                    children=[
-                        html.Td(str(row["formulation"])),
-                        html.Td(str(row["runs"])),
-                        html.Td(str(row["ok_runs"])),
-                        html.Td(fmt_best_energy(row["best_energy"])),
-                        html.Td(str(row["avg_energy"])),
-                    ],
-                )
-                for row in summary_rows
-            ]),
-        ],
-    )
-
-    results = html.Div(
-        style={"display": "flex", "gap": "2rem", "alignItems": "flex-start"},
-        children=[
-            html.Div(
-                children=dcc.Graph(
-                    figure=build_comparison_graph(selected_input, solver_schedules),
-                    config={"displayModeBar": False},
-                    responsive=True,
-                ) if solver_schedules else html.P(
-                    "No solutions found to compare.",
-                    style={"color": "#888", "fontStyle": "italic"},
-                ),
-            ),
-            html.Div(
-                children=[
-                    html.H3("Comparison Summary"),
-                    summary_table,
-                ],
-            ),
-        ],
-    )
+    summary_table = comparison_summary_table(summary_rows, min_energy, known_optimal)
+    fig = build_comparison_graph(selected_input, solver_schedules) if solver_schedules else None
+    results = results_layout(comparison_panel(fig), summary_table)
 
     return results, False, "Results"
