@@ -169,25 +169,19 @@ class TestUpdateRunState:
         selection = [str(SolverType.HIGHS.value), str(SolverType.SCIP.value), str(SolverType.STRIDE.value)]
         with _ctx("run-button"):
             result = cb.update_run_state(1, 0, selection)
-        # run button should be hidden
-        run_btn_style = result[-3]
-        assert run_btn_style == {"display": "none"}
+        assert result.run_button_style == {"display": "none"}
 
     def test_run_button_none_selected_results_tab_not_loading(self):
         with _ctx("run-button"):
             result = cb.update_run_state(1, 0, [])
         # When nothing is selected, results tab label stays "Results" (not "Loading...")
-        results_tab_label = result[0]
-        assert results_tab_label == "Results"
+        assert result.results_tab_label == "Results"
 
     def test_cancel_button_restores_run_button(self):
         with _ctx("cancel-button"):
             result = cb.update_run_state(0, 1, [])
-        # Cancel button should be hidden, run button visible
-        run_btn_style    = result[-3]
-        cancel_btn_style = result[-2]
-        assert cancel_btn_style == {"display": "none"}
-        assert run_btn_style    == {}
+        assert result.cancel_button_style == {"display": "none"}
+        assert result.run_button_style    == {}
 
     def test_no_trigger_raises_prevent_update(self):
         with _ctx(None):

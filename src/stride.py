@@ -173,7 +173,7 @@ def create_model(
 
     Constructs a ``dwave.optimization.Model`` using integer decision variables
     for job start times and modes. Resource feasibility is enforced via an
-    accumulate-zip sweep over sorted start/end events. The objective minimises
+    accumulate-zip sweep over sorted start/end events. The objective minimizes
     ``100 * R_Mechaniker + 51 * R_Techniker``.
 
     Args:

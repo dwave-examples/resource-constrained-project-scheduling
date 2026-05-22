@@ -94,6 +94,27 @@ def render_initial_state(input_file: str) -> go.Figure:
 #    that trigger the three independent background solver callbacks below.
 # ---------------------------------------------------------------------------
 
+class UpdateRunStateReturn(NamedTuple):
+    """Return type for update_run_state."""
+    results_tab_label:    str  = "Results"
+    results_tab_disabled: bool = False
+    running_highs:        bool = False
+    highs_tab_label:      str  = "HiGHS"
+    highs_tab_disabled:   bool = False
+    highs_tab_class:      str  = ""
+    running_scip:         bool = False
+    scip_tab_label:       str  = "SCIP"
+    scip_tab_disabled:    bool = False
+    scip_tab_class:       str  = ""
+    running_stride:       bool = False
+    stride_tab_label:     str  = "Stride"
+    stride_tab_disabled:  bool = False
+    stride_tab_class:     str  = ""
+    run_button_style:     dict = {}
+    cancel_button_style:  dict = {"display": "none"}
+    tabs_value:           str  = dash.no_update
+
+
 @dash.callback(
     Output("results-tab", "children"),
     Output("results-tab", "disabled"),
@@ -123,7 +144,7 @@ def update_run_state(
     run_click: int,
     cancel_click: int,
     solver_selection: list[str],
-) -> tuple:
+) -> UpdateRunStateReturn:
     """Update tab labels, disabled state, and running flags on run/cancel.
 
     Args:
@@ -132,45 +153,38 @@ def update_run_state(
         solver_selection: Currently selected solver values.
 
     Returns:
-        Tuple of outputs controlling tab state, button visibility, and
+        UpdateRunStateReturn controlling tab state, button visibility, and
         running-* flags for each solver.
     """
     selection = solver_selection or []
-    highs_selected = str(SolverType.HIGHS.value) in selection
-    scip_selected  = str(SolverType.SCIP.value)  in selection
+    highs_selected  = str(SolverType.HIGHS.value)  in selection
+    scip_selected   = str(SolverType.SCIP.value)   in selection
     stride_selected = str(SolverType.STRIDE.value) in selection
 
     if ctx.triggered_id == "run-button" and run_click:
-        loading = ("Loading...", True)
-        return (
-            *(loading if highs_selected or scip_selected or stride_selected else ("Results", True)),
-            highs_selected,
-            *(loading if highs_selected else ("HiGHS", True)),
-            "",  # reset highs className
-            scip_selected,
-            *(loading if scip_selected else ("SCIP", True)),
-            "",  # reset scip className
-            stride_selected,
-            *(loading if stride_selected else ("Stride", True)),
-            "",  # reset stride className
-            {"display": "none"},  # hide run button
-            {},                   # show cancel button
-            "input-tab",
+        any_selected = highs_selected or scip_selected or stride_selected
+        return UpdateRunStateReturn(
+            results_tab_label=   "Loading..." if any_selected else "Results",
+            results_tab_disabled= True,
+            running_highs=        highs_selected,
+            highs_tab_label=      "Loading..." if highs_selected else "HiGHS",
+            highs_tab_disabled=   True,
+            highs_tab_class=      "",
+            running_scip=         scip_selected,
+            scip_tab_label=       "Loading..." if scip_selected else "SCIP",
+            scip_tab_disabled=    True,
+            scip_tab_class=       "",
+            running_stride=       stride_selected,
+            stride_tab_label=     "Loading..." if stride_selected else "Stride",
+            stride_tab_disabled=  True,
+            stride_tab_class=     "",
+            run_button_style=     {"display": "none"},
+            cancel_button_style=  {},
+            tabs_value=           "input-tab",
         )
 
     if ctx.triggered_id == "cancel-button" and cancel_click:
-        return (
-            "Results", False,
-            False,
-            "HiGHS", False, "",
-            False,
-            "SCIP", False, "",
-            False,
-            "Stride", False, "",
-            {},                   # show run button
-            {"display": "none"},  # hide cancel button
-            dash.no_update,
-        )
+        return UpdateRunStateReturn()
 
     raise PreventUpdate
 
@@ -268,9 +282,9 @@ class RunHiGHSReturn(NamedTuple):
     """Return type for run_highs."""
     highs_results: html.Div     = dash.no_update
     highs_store: dict            = dash.no_update
-    highs_tab_label: str         = dash.no_update
-    highs_tab_disabled: bool     = dash.no_update
-    running_highs: bool          = dash.no_update
+    highs_tab_label: str         = "HiGHS"
+    highs_tab_disabled: bool     = False
+    running_highs: bool          = False
     highs_tab_class: str         = dash.no_update
 
 
@@ -315,9 +329,6 @@ def run_highs(
         return RunHiGHSReturn(
             highs_results=solver_not_selected_panel("HiGHS"),
             highs_store={"run_click": run_click, "rows": []},
-            highs_tab_label="HiGHS",
-            highs_tab_disabled=False,
-            running_highs=False,
         )
 
     selected_input = input_file or ""
@@ -327,9 +338,6 @@ def run_highs(
     return RunHiGHSReturn(
         highs_results=_solver_panel("HiGHS (MILP)", rows, selected_input),
         highs_store={"run_click": run_click, "rows": rows},
-        highs_tab_label="HiGHS",
-        highs_tab_disabled=False,
-        running_highs=False,
         highs_tab_class=_solver_tab_class(rows),
     )
 
@@ -338,9 +346,9 @@ class RunSCIPReturn(NamedTuple):
     """Return type for run_scip."""
     scip_results: html.Div      = dash.no_update
     scip_store: dict             = dash.no_update
-    scip_tab_label: str          = dash.no_update
-    scip_tab_disabled: bool      = dash.no_update
-    running_scip: bool           = dash.no_update
+    scip_tab_label: str          = "SCIP"
+    scip_tab_disabled: bool      = False
+    running_scip: bool           = False
     scip_tab_class: str          = dash.no_update
 
 
@@ -385,9 +393,6 @@ def run_scip(
         return RunSCIPReturn(
             scip_results=solver_not_selected_panel("SCIP"),
             scip_store={"run_click": run_click, "rows": []},
-            scip_tab_label="SCIP",
-            scip_tab_disabled=False,
-            running_scip=False,
         )
 
     selected_input = input_file or ""
@@ -397,9 +402,6 @@ def run_scip(
     return RunSCIPReturn(
         scip_results=_solver_panel("SCIP (MILP)", rows, selected_input),
         scip_store={"run_click": run_click, "rows": rows},
-        scip_tab_label="SCIP",
-        scip_tab_disabled=False,
-        running_scip=False,
         scip_tab_class=_solver_tab_class(rows),
     )
 
@@ -408,9 +410,9 @@ class RunStrideReturn(NamedTuple):
     """Return type for run_stride."""
     stride_results: html.Div    = dash.no_update
     stride_store: dict           = dash.no_update
-    stride_tab_label: str        = dash.no_update
-    stride_tab_disabled: bool    = dash.no_update
-    running_stride: bool         = dash.no_update
+    stride_tab_label: str        = "Stride"
+    stride_tab_disabled: bool    = False
+    running_stride: bool         = False
     stride_tab_class: str        = dash.no_update
 
 
@@ -455,9 +457,6 @@ def run_stride(
         return RunStrideReturn(
             stride_results=solver_not_selected_panel("Stride"),
             stride_store={"run_click": run_click, "rows": []},
-            stride_tab_label="Stride",
-            stride_tab_disabled=False,
-            running_stride=False,
         )
 
     selected_input = input_file or ""
@@ -467,9 +466,6 @@ def run_stride(
     return RunStrideReturn(
         stride_results=_solver_panel("Stride Quantum Hybrid", rows, selected_input),
         stride_store={"run_click": run_click, "rows": rows},
-        stride_tab_label="Stride",
-        stride_tab_disabled=False,
-        running_stride=False,
         stride_tab_class=_solver_tab_class(rows),
     )
 
