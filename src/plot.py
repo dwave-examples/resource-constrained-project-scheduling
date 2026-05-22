@@ -21,6 +21,8 @@ from pathlib import Path
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+# Colors for each execution mode (1=slow/lean → 3=fast/resource-heavy)
+_MODE_COLORS = {1: "#2A7DE1", 2: "#17BEBB", 3: "#E83E8C"}
 
 def _parse_mps_structure(input_path: str) -> dict:
     """Parse MPS sections to extract precedence, resource usage, and capacities."""
@@ -281,40 +283,39 @@ def build_input_graph(input_path: str) -> go.Figure:
         ),
     )
 
-    fig.add_trace(
-        go.Bar(
-            x=[duration_by_job[job] for job in jobs_sorted],
-            y=[f"Job {job}" for job in jobs_sorted],
-            base=[start_by_job[job] for job in jobs_sorted],
-            orientation="h",
-            marker={
-                "color": [
-                    "#1f77b4" if profile["mechanic_use"].get((job, mode_by_job[job]), 0) > 0
-                    else "#ff7f0e"
-                    for job in jobs_sorted
-                ]
-            },
-            customdata=[
-                [
-                    mode_by_job[job],
-                    profile["mechanic_use"].get((job, mode_by_job[job]), 0),
-                    profile["technician_use"].get((job, mode_by_job[job]), 0),
-                    duration_by_job[job],
-                ]
-                for job in jobs_sorted
-            ],
-            hovertemplate=(
-                "<b>%{y}</b><br>Start: %{base}<br>Duration: %{customdata[3]}<br>"
-                "Mode: %{customdata[0]}<br>"
-                "Mechanics: %{customdata[1]}<br>"
-                "Technicians: %{customdata[2]}<extra></extra>"
+    for mode_val, color in _MODE_COLORS.items():
+        mode_jobs = [job for job in jobs_sorted if mode_by_job[job] == mode_val]
+        if not mode_jobs:
+            continue
+        fig.add_trace(
+            go.Bar(
+                x=[duration_by_job[job] for job in mode_jobs],
+                y=[f"Job {job}" for job in mode_jobs],
+                base=[start_by_job[job] for job in mode_jobs],
+                orientation="h",
+                marker={"color": color},
+                customdata=[
+                    [
+                        mode_val,
+                        profile["mechanic_use"].get((job, mode_val), 0),
+                        profile["technician_use"].get((job, mode_val), 0),
+                        duration_by_job[job],
+                    ]
+                    for job in mode_jobs
+                ],
+                hovertemplate=(
+                    "<b>%{y}</b><br>Start: %{base}<br>Duration: %{customdata[3]}<br>"
+                    "Mode: %{customdata[0]}<br>"
+                    "Mechanics: %{customdata[1]}<br>"
+                    "Technicians: %{customdata[2]}<extra></extra>"
+                ),
+                name=f"Mode {mode_val}",
+                legendgroup=f"mode{mode_val}",
+                showlegend=True,
             ),
-            name="Planned Job Window",
-            showlegend=False,
-        ),
-        row=1,
-        col=1,
-    )
+            row=1,
+            col=1,
+        )
 
     x_axis = list(range(len(mech_demand)))
 
@@ -347,12 +348,17 @@ def build_input_graph(input_path: str) -> go.Figure:
         margin={"l": 20, "r": 20, "t": 30, "b": 20},
         paper_bgcolor="white",
         plot_bgcolor="white",
-        # legend={"orientation": "h", "y": 1.03, "x": 0},
+        showlegend=True,
+        legend={"orientation": "v", "x": 1.01, "y": 1},
         height=760,
     )
     fig.update_xaxes(title_text="Time", row=2, col=1)
     fig.update_xaxes(showticklabels=True, row=1, col=1)
-    fig.update_yaxes(title_text="Jobs", row=1, col=1, autorange="reversed")
+    fig.update_yaxes(
+        title_text="Jobs", row=1, col=1,
+        categoryorder="array",
+        categoryarray=[f"Job {job}" for job in reversed(jobs_sorted)],
+    )
     fig.update_yaxes(title_text="Resource Units", row=2, col=1)
 
     return fig
@@ -424,39 +430,39 @@ def build_solution_graph(
         ),
     )
 
-    fig.add_trace(
-        go.Bar(
-            x=[duration[job] for job in jobs_sorted],
-            y=[f"Job {job}" for job in jobs_sorted],
-            base=[start[job] for job in jobs_sorted],
-            orientation="h",
-            marker={
-                "color": [
-                    "#1f77b4" if profile["mechanic_use"].get((job, selected_mode[job]), 0) > 0
-                    else "#ff7f0e"
-                    for job in jobs_sorted
-                ]
-            },
-            customdata=[
-                [
-                    selected_mode[job],
-                    profile["mechanic_use"].get((job, selected_mode[job]), 0),
-                    profile["technician_use"].get((job, selected_mode[job]), 0),
-                    duration[job],
-                ]
-                for job in jobs_sorted
-            ],
-            hovertemplate=(
-                "<b>%{y}</b><br>Start: %{base}<br>Duration: %{customdata[3]}<br>"
-                "Mode: %{customdata[0]}<br>"
-                "Mechanics: %{customdata[1]}<br>"
-                "Technicians: %{customdata[2]}<extra></extra>"
+    for mode_val, color in _MODE_COLORS.items():
+        mode_jobs = [job for job in jobs_sorted if selected_mode[job] == mode_val]
+        if not mode_jobs:
+            continue
+        fig.add_trace(
+            go.Bar(
+                x=[duration[job] for job in mode_jobs],
+                y=[f"Job {job}" for job in mode_jobs],
+                base=[start[job] for job in mode_jobs],
+                orientation="h",
+                marker={"color": color},
+                customdata=[
+                    [
+                        mode_val,
+                        profile["mechanic_use"].get((job, mode_val), 0),
+                        profile["technician_use"].get((job, mode_val), 0),
+                        duration[job],
+                    ]
+                    for job in mode_jobs
+                ],
+                hovertemplate=(
+                    "<b>%{y}</b><br>Start: %{base}<br>Duration: %{customdata[3]}<br>"
+                    "Mode: %{customdata[0]}<br>"
+                    "Mechanics: %{customdata[1]}<br>"
+                    "Technicians: %{customdata[2]}<extra></extra>"
+                ),
+                name=f"Mode {mode_val}",
+                legendgroup=f"mode{mode_val}",
+                showlegend=True,
             ),
-            showlegend=False,
-        ),
-        row=1,
-        col=1,
-    )
+            row=1,
+            col=1,
+        )
 
     x_axis = list(range(len(mech_demand)))
 
@@ -489,11 +495,17 @@ def build_solution_graph(
         margin={"l": 20, "r": 20, "t": 40, "b": 20},
         paper_bgcolor="white",
         plot_bgcolor="white",
+        showlegend=True,
+        legend={"orientation": "v", "x": 1.01, "y": 1},
         height=760,
     )
     fig.update_xaxes(title_text="Time", row=2, col=1)
     fig.update_xaxes(showticklabels=True, row=1, col=1)
-    fig.update_yaxes(title_text="Jobs", row=1, col=1, autorange="reversed")
+    fig.update_yaxes(
+        title_text="Jobs", row=1, col=1,
+        categoryorder="array",
+        categoryarray=[f"Job {job}" for job in reversed(jobs_sorted)],
+    )
     fig.update_yaxes(title_text="Resource Units", row=2, col=1)
 
     return fig
