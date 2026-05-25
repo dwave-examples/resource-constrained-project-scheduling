@@ -32,8 +32,15 @@ _JOB_COLORS: dict[tuple[str, int], str] = {
     ("technician", 3): "#A64A09",
 }
 # Mid-shade of each family used for the resource demand lines
-_MECHANIC_LINE_COLOR = "#3886E3"
-_TECHNICIAN_LINE_COLOR = "#EF6B0D"
+_MECHANIC_LINE_COLOR = _JOB_COLORS[("mechanic", 2)]
+_TECHNICIAN_LINE_COLOR = _JOB_COLORS[("technician", 2)]
+
+# Colors used for each solver in the comparison chart
+_SOLVER_COLORS = {
+    "HiGHS": "#E83E8C",
+    "SCIP": "#2d4376",
+    "Stride": "#17BEBB",
+}
 
 
 def _choose_business_mode(job: int, profile: dict) -> int:
@@ -318,14 +325,6 @@ def _compute_demand(
             mech[t] += float(profile["mechanic_use"].get((job, m), 0.0))
             tech[t] += float(profile["technician_use"].get((job, m), 0.0))
     return mech, tech, horizon
-
-
-# Colors used for each solver in the comparison chart
-_SOLVER_COLORS = {
-    "HiGHS": "#E83E8C",
-    "SCIP": "#2d4376",
-    "Stride": "#17BEBB",
-}
 
 
 def build_comparison_graph(

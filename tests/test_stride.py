@@ -23,10 +23,10 @@ import pytest
 
 from src.stride import (
     _preprocessed_data,
-    create_precedence_pairs,
     create_runtime_use_matrices,
     solve_stride,
 )
+from src.utils import parse_mps_structure
 
 # ---------------------------------------------------------------------------
 # create_runtime_use_matrices  (integration — uses real MPS file)
@@ -66,13 +66,13 @@ class TestCreateRuntimeUseMatrices:
 
 
 # ---------------------------------------------------------------------------
-# create_precedence_pairs  (integration — uses real MPS file)
+# precedence pairs  (via parse_mps_structure)
 # ---------------------------------------------------------------------------
 
 
 class TestCreatePrecedencePairs:
     def test_returns_list_of_tuples(self, mps_path):
-        pairs = create_precedence_pairs(mps_path)
+        pairs = parse_mps_structure(mps_path)["edges"]
         assert isinstance(pairs, list)
         assert len(pairs) > 0
         for p in pairs:
@@ -80,13 +80,13 @@ class TestCreatePrecedencePairs:
             assert len(p) == 2
 
     def test_job_ids_in_range(self, mps_path):
-        pairs = create_precedence_pairs(mps_path)
+        pairs = parse_mps_structure(mps_path)["edges"]
         for j1, j2 in pairs:
             assert 1 <= j1 <= 30
             assert 1 <= j2 <= 30
 
     def test_no_self_loops(self, mps_path):
-        pairs = create_precedence_pairs(mps_path)
+        pairs = parse_mps_structure(mps_path)["edges"]
         for j1, j2 in pairs:
             assert j1 != j2
 

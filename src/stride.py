@@ -68,19 +68,6 @@ def create_runtime_use_matrices(
     return runtimes_matrix, rm_use_matrix, rt_use_matrix, lower_bounds, upper_bounds
 
 
-def create_precedence_pairs(input_path: str) -> list[tuple[int, int]]:
-    """Extract the job precedence pairs from the MPS instance.
-
-    Args:
-        input_path: Path to the ``.mps`` instance file.
-
-    Returns:
-        A list of ``(j1, j2)`` integer tuples (1-indexed job numbers) for
-        every precedence constraint in the model.
-    """
-    return parse_mps_structure(input_path)["edges"]
-
-
 def create_model(
     lower_bounds: list[int],
     upper_bounds: list[int],
@@ -223,7 +210,7 @@ def _preprocessed_data(
     runtimes_matrix, rm_use_matrix, rt_use_matrix, lower_bounds, upper_bounds = (
         create_runtime_use_matrices(input_path)
     )
-    precedence_pairs = create_precedence_pairs(input_path)
+    precedence_pairs = parse_mps_structure(input_path)["edges"]
     return runtimes_matrix, rm_use_matrix, rt_use_matrix, lower_bounds, upper_bounds, precedence_pairs
 
 

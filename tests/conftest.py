@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
 import pytest
 
@@ -24,12 +24,11 @@ import pytest
 # Path helpers
 # ---------------------------------------------------------------------------
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MPS_PATH = os.path.join(REPO_ROOT, "input", "30n20b8.mps")
+MPS_PATH = Path(__file__).parent.parent / "input" / "30n20b8.mps"
 
 
 @pytest.fixture
-def mps_path() -> str:
+def mps_path() -> Path:
     """Return the absolute path to the bundled MPS instance."""
     return MPS_PATH
 
