@@ -124,7 +124,7 @@ def create_runtime_use_matrices(
     for (j, m), v in rt_use_total.items():
         rt_use_matrix[j - 1, m - 1] = v
 
-    num_jobs = 30
+    num_jobs = runtimes_matrix.shape[0]
     lower_bounds = [0] * num_jobs
     upper_bounds = [0] * num_jobs
     for var in problem.variables():
@@ -200,39 +200,8 @@ def create_model(
     # accumulate zip formulation
     model = Model()
 
-    num_jobs = 30
-    upper_bounds_modes = [
-        2,
-        2,
-        2,
-        2,
-        2,
-        2,
-        2,
-        2,
-        2,
-        1,
-        2,
-        2,
-        2,
-        2,
-        2,
-        1,
-        2,
-        2,
-        2,
-        2,
-        2,
-        1,
-        2,
-        2,
-        2,
-        2,
-        2,
-        2,
-        1,
-        2,
-    ]
+    num_jobs = runtimes_matrix.shape[0]
+    upper_bounds_modes = ((runtimes_matrix > 0).sum(axis=1) - 1).astype(int).tolist()
 
     starts = model.integer(num_jobs, lower_bound=lower_bounds, upper_bound=upper_bounds)
 
@@ -390,7 +359,7 @@ def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
         model.lock()
 
         solver = LeapHybridNLSampler()
-        solver.sample(model, time_limit=time_limit)
+        solver.sample(model, time_limit=time_limit, label="Example - Resource-Constrained Project Scheduling")
 
         starts_values = [int(value) for value in starts.state().tolist()]
         modes_values = [int(value) for value in modes.state().tolist()]
