@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 
 from src.demo_enums import SolverType
@@ -61,21 +59,11 @@ FAKE_FAIL_RESULT = {
 
 
 class TestCompareFormulations:
-    def _runners(self, overrides: dict):
-        """Return a SOLVER_RUNNERS dict with specified solvers replaced by mocks."""
-        from src.demo_runner import SOLVER_RUNNERS
-
-        runners = dict(SOLVER_RUNNERS)
-        for solver_type, fake_result in overrides.items():
-            runners[solver_type] = lambda *a, result=fake_result, **kw: result
-        return runners
-
     def test_single_solver_single_run(self):
-        runners = self._runners({SolverType.HIGHS: FAKE_HIGHS_RESULT})
-        with patch("src.demo_runner.SOLVER_RUNNERS", runners):
-            rows = compare_formulations(
-                [str(SolverType.HIGHS.value)], time_limit=5.0, runs=1, input_path="x.mps"
-            )
+        rows = compare_formulations(
+            [str(SolverType.HIGHS.value)], time_limit=5.0, runs=1, input_path="x.mps",
+            runners={SolverType.HIGHS: lambda *a, **kw: FAKE_HIGHS_RESULT},
+        )
         assert len(rows) == 1
         row = rows[0]
         assert row["formulation"] == SolverType.HIGHS.label
@@ -84,63 +72,57 @@ class TestCompareFormulations:
         assert row["ok"] is True
 
     def test_multiple_runs(self):
-        runners = self._runners({SolverType.HIGHS: FAKE_HIGHS_RESULT})
-        with patch("src.demo_runner.SOLVER_RUNNERS", runners):
-            rows = compare_formulations(
-                [str(SolverType.HIGHS.value)], time_limit=5.0, runs=3, input_path="x.mps"
-            )
+        rows = compare_formulations(
+            [str(SolverType.HIGHS.value)], time_limit=5.0, runs=3, input_path="x.mps",
+            runners={SolverType.HIGHS: lambda *a, **kw: FAKE_HIGHS_RESULT},
+        )
         assert len(rows) == 3
         assert [r["run"] for r in rows] == [1, 2, 3]
 
     def test_multiple_solvers(self):
-        runners = self._runners(
-            {SolverType.HIGHS: FAKE_HIGHS_RESULT, SolverType.SCIP: FAKE_SCIP_RESULT}
+        rows = compare_formulations(
+            [str(SolverType.HIGHS.value), str(SolverType.SCIP.value)],
+            time_limit=5.0,
+            runs=1,
+            input_path="x.mps",
+            runners={
+                SolverType.HIGHS: lambda *a, **kw: FAKE_HIGHS_RESULT,
+                SolverType.SCIP: lambda *a, **kw: FAKE_SCIP_RESULT,
+            },
         )
-        with patch("src.demo_runner.SOLVER_RUNNERS", runners):
-            rows = compare_formulations(
-                [str(SolverType.HIGHS.value), str(SolverType.SCIP.value)],
-                time_limit=5.0,
-                runs=1,
-                input_path="x.mps",
-            )
         assert len(rows) == 2
         formulations = {r["formulation"] for r in rows}
         assert SolverType.HIGHS.label in formulations
         assert SolverType.SCIP.label in formulations
 
     def test_row_contains_starts_and_modes(self):
-        runners = self._runners({SolverType.HIGHS: FAKE_HIGHS_RESULT})
-        with patch("src.demo_runner.SOLVER_RUNNERS", runners):
-            rows = compare_formulations(
-                [str(SolverType.HIGHS.value)], time_limit=5.0, runs=1, input_path="x.mps"
-            )
+        rows = compare_formulations(
+            [str(SolverType.HIGHS.value)], time_limit=5.0, runs=1, input_path="x.mps",
+            runners={SolverType.HIGHS: lambda *a, **kw: FAKE_HIGHS_RESULT},
+        )
         assert rows[0]["starts"] == FAKE_HIGHS_RESULT["starts"]
         assert rows[0]["modes"] == FAKE_HIGHS_RESULT["modes"]
 
     def test_row_required_keys(self):
-        runners = self._runners({SolverType.HIGHS: FAKE_HIGHS_RESULT})
-        with patch("src.demo_runner.SOLVER_RUNNERS", runners):
-            rows = compare_formulations(
-                [str(SolverType.HIGHS.value)], time_limit=5.0, runs=1, input_path="x.mps"
-            )
+        rows = compare_formulations(
+            [str(SolverType.HIGHS.value)], time_limit=5.0, runs=1, input_path="x.mps",
+            runners={SolverType.HIGHS: lambda *a, **kw: FAKE_HIGHS_RESULT},
+        )
         for key in ("formulation", "run", "status", "energy", "ok", "starts", "modes"):
             assert key in rows[0]
 
     def test_solvers_sorted_by_value(self):
         """SCIP (1) should appear before Stride (2) in the output."""
-        runners = self._runners(
-            {
-                SolverType.SCIP: FAKE_SCIP_RESULT,
-                SolverType.STRIDE: {**FAKE_FAIL_RESULT, "solver": "Stride"},
-            }
+        rows = compare_formulations(
+            [str(SolverType.STRIDE.value), str(SolverType.SCIP.value)],
+            time_limit=5.0,
+            runs=1,
+            input_path="x.mps",
+            runners={
+                SolverType.SCIP: lambda *a, **kw: FAKE_SCIP_RESULT,
+                SolverType.STRIDE: lambda *a, **kw: {**FAKE_FAIL_RESULT, "solver": "Stride"},
+            },
         )
-        with patch("src.demo_runner.SOLVER_RUNNERS", runners):
-            rows = compare_formulations(
-                [str(SolverType.STRIDE.value), str(SolverType.SCIP.value)],
-                time_limit=5.0,
-                runs=1,
-                input_path="x.mps",
-            )
         assert rows[0]["formulation"] == SolverType.SCIP.label
         assert rows[1]["formulation"] == SolverType.STRIDE.label
 

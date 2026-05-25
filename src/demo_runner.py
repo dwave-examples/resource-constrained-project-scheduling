@@ -31,7 +31,12 @@ SOLVER_RUNNERS = {
 
 
 def compare_formulations(
-    selection: list[str], time_limit: float, runs: int, input_path: str
+    selection: list[str],
+    time_limit: float,
+    runs: int,
+    input_path: str,
+    *,
+    runners: dict = SOLVER_RUNNERS,
 ) -> list[dict]:
     """Run selected solver formulations repeatedly and collect run-level results.
 
@@ -40,6 +45,10 @@ def compare_formulations(
         time_limit: Maximum runtime per solver run in seconds.
         runs: Number of repeated runs per solver.
         input_path: Path to the MPS-format problem file.
+        runners: Optional mapping of ``SolverType`` → callable used to invoke each
+            solver.  Defaults to ``SOLVER_RUNNERS``.  Pass a custom dict to inject
+            alternative implementations (e.g. a mock Stride runner in tests or when
+            a D-Wave API token is not available).
 
     Returns:
         A list of result dictionaries, one per (solver, run) pair, each containing
@@ -52,7 +61,7 @@ def compare_formulations(
 
     rows = []
     for solver_type in selected_types:
-        runner = SOLVER_RUNNERS[solver_type]
+        runner = runners[solver_type]
         for run_idx in range(1, runs + 1):
             result = runner(time_limit=time_limit, input_path=input_path)
             rows.append(
