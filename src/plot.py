@@ -14,12 +14,13 @@
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict, deque
 from pathlib import Path
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
+from src.utils import parse_mps_structure
 
 # Colors keyed by (resource_type, mode): shade encodes mode speed within each resource family
 _JOB_COLORS: dict[tuple[str, int], str] = {
@@ -35,153 +36,6 @@ _MECHANIC_LINE_COLOR = "#3886E3"
 _TECHNICIAN_LINE_COLOR = "#EF6B0D"
 
 
-def _parse_mps_structure(input_path: str) -> dict:
-    """Parse an MPS file to extract jobs, precedences, resource usage, and capacities.
-
-    Args:
-        input_path: Path to the MPS-format problem file.
-
-    Returns:
-        A dictionary with keys:
-
-        - ``"jobs"``: sorted list of job IDs.
-        - ``"edges"``: sorted list of ``(src, dst)`` precedence pairs.
-        - ``"durations"``: mapping of ``(job, mode)`` → duration in time units.
-        - ``"mechanic_use"``: mapping of ``(job, mode)`` → mechanic units consumed.
-        - ``"technician_use"``: mapping of ``(job, mode)`` → technician units consumed.
-        - ``"capacities"``: dict with ``"Mechaniker"`` and ``"Techniker"`` upper bounds.
-    """
-    path = Path(input_path)
-    if not path.exists() or not path.is_file():
-        return {
-            "jobs": [],
-            "edges": [],
-            "durations": {},
-            "mechanic_use": {},
-            "technician_use": {},
-            "capacities": {"Mechaniker": 0.0, "Techniker": 0.0},
-        }
-
-    rows: list[str] = []
-    columns: list[str] = []
-    rhs: list[str] = []
-
-    section = ""
-    for raw_line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("*"):
-            continue
-        upper = line.upper()
-        if upper == "ROWS":
-            section = "ROWS"
-            continue
-        if upper == "COLUMNS":
-            section = "COLUMNS"
-            continue
-        if upper == "RHS":
-            section = "RHS"
-            continue
-        if upper in {"RANGES", "BOUNDS", "ENDATA"}:
-            section = ""
-            continue
-
-        if section == "ROWS":
-            rows.append(line)
-        elif section == "COLUMNS":
-            columns.append(line)
-        elif section == "RHS":
-            rhs.append(line)
-
-    edge_pattern = re.compile(r"precedence_(\d+)_(\d+)")
-    edges = []
-    jobs = set()
-
-    for row in rows:
-        tokens = row.split()
-        if len(tokens) >= 2:
-            name = tokens[1]
-            match = edge_pattern.search(name)
-            if match:
-                src = int(match.group(1))
-                dst = int(match.group(2))
-                edges.append((src, dst))
-                jobs.update([src, dst])
-            elif name.startswith("start_"):
-                jobs.add(int(name.split("_")[-1]))
-
-    rm_sets = defaultdict(set)
-    rt_sets = defaultdict(set)
-    rm_use = defaultdict(float)
-    rt_use = defaultdict(float)
-    x_pattern = re.compile(r"x_(\d+)_(\d+)_(\d+)")
-
-    for line in columns:
-        tokens = line.split()
-        if len(tokens) < 3:
-            continue
-
-        var_name = tokens[0]
-        m_var = x_pattern.match(var_name)
-        if not m_var:
-            continue
-
-        job = int(m_var.group(1))
-        mode = int(m_var.group(2))
-        start_t = int(m_var.group(3))
-        jobs.add(job)
-
-        pairs = tokens[1:]
-        for i in range(0, len(pairs) - 1, 2):
-            row_name = pairs[i]
-            try:
-                value = float(pairs[i + 1])
-            except ValueError:
-                continue
-
-            if row_name.startswith("rescap_Mechaniker_"):
-                const_t = int(row_name.split("_")[-1])
-                rm_sets[(job, mode, start_t)].add(const_t)
-                rm_use[(job, mode)] = max(rm_use[(job, mode)], value)
-            elif row_name.startswith("rescap_Techniker_"):
-                const_t = int(row_name.split("_")[-1])
-                rt_sets[(job, mode, start_t)].add(const_t)
-                rt_use[(job, mode)] = max(rt_use[(job, mode)], value)
-
-    durations = defaultdict(int)
-    for key, times in rm_sets.items():
-        job, mode, _ = key
-        durations[(job, mode)] = max(durations[(job, mode)], len(times))
-    for key, times in rt_sets.items():
-        job, mode, _ = key
-        durations[(job, mode)] = max(durations[(job, mode)], len(times))
-
-    capacities = {"Mechaniker": 0.0, "Techniker": 0.0}
-    for line in rhs:
-        tokens = line.split()
-        if len(tokens) < 3:
-            continue
-        pairs = tokens[1:]
-        for i in range(0, len(pairs) - 1, 2):
-            row_name = pairs[i]
-            try:
-                value = float(pairs[i + 1])
-            except ValueError:
-                continue
-            if row_name.startswith("rescap_Mechaniker"):
-                capacities["Mechaniker"] = max(capacities["Mechaniker"], value)
-            elif row_name.startswith("rescap_Techniker"):
-                capacities["Techniker"] = max(capacities["Techniker"], value)
-
-    return {
-        "jobs": sorted(jobs),
-        "edges": sorted(set(edges)),
-        "durations": dict(durations),
-        "mechanic_use": dict(rm_use),
-        "technician_use": dict(rt_use),
-        "capacities": capacities,
-    }
-
-
 def _choose_business_mode(job: int, profile: dict) -> int:
     """Pick a representative execution mode for a job for display purposes.
 
@@ -190,7 +44,7 @@ def _choose_business_mode(job: int, profile: dict) -> int:
 
     Args:
         job: Job ID.
-        profile: Parsed MPS structure as returned by ``_parse_mps_structure``.
+        profile: Parsed MPS structure as returned by ``parse_mps_structure``.
 
     Returns:
         The selected mode number (1-indexed).
@@ -228,7 +82,7 @@ def _earliest_start_schedule(
     ``_choose_business_mode``.
 
     Args:
-        profile: Parsed MPS structure as returned by ``_parse_mps_structure``.
+        profile: Parsed MPS structure as returned by ``parse_mps_structure``.
 
     Returns:
         A tuple containing:
@@ -292,7 +146,7 @@ def build_input_graph(input_path: str) -> go.Figure:
     Returns:
         A Plotly figure with a Gantt chart (row 1) and resource demand lines (row 2).
     """
-    profile = _parse_mps_structure(input_path)
+    profile = parse_mps_structure(input_path)
     jobs = profile["jobs"]
 
     if not jobs:
@@ -429,20 +283,6 @@ def build_input_graph(input_path: str) -> go.Figure:
     return fig
 
 
-def parse_mps_structure(input_path: str) -> dict:
-    """Return the parsed MPS problem structure for callers outside this module.
-
-    Args:
-        input_path: Path to the MPS-format problem file.
-
-    Returns:
-        A dictionary with keys ``"jobs"``, ``"edges"``, ``"durations"``,
-        ``"mechanic_use"``, ``"technician_use"``, and ``"capacities"``.
-        See ``_parse_mps_structure`` for full details.
-    """
-    return _parse_mps_structure(input_path)
-
-
 def _compute_demand(
     profile: dict,
     starts_by_job: dict[int, int],
@@ -451,7 +291,7 @@ def _compute_demand(
     """Compute per-timestep resource demand arrays from a solver schedule.
 
     Args:
-        profile: Parsed MPS structure as returned by ``_parse_mps_structure``.
+        profile: Parsed MPS structure as returned by ``parse_mps_structure``.
         starts_by_job: Start time keyed by job ID.
         modes_by_job: Execution mode keyed by job ID.
 
@@ -506,7 +346,7 @@ def build_comparison_graph(
         fig.update_layout(title="No solutions to compare.", template="plotly_white")
         return fig
 
-    profile = _parse_mps_structure(input_path)
+    profile = parse_mps_structure(input_path)
     if not profile["jobs"]:
         fig = go.Figure()
         fig.update_layout(title="No data.", template="plotly_white")
@@ -590,7 +430,7 @@ def build_solution_graph(
         fig.update_layout(title=f"{title}: Schedule Not Available (Showing Baseline)")
         return fig
 
-    profile = _parse_mps_structure(input_path)
+    profile = parse_mps_structure(input_path)
     jobs = profile["jobs"]
     if not jobs:
         return build_input_graph(input_path)

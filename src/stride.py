@@ -20,10 +20,11 @@ from typing import Any
 
 import dwave.optimization
 import numpy as np
-import pulp
 from dwave.optimization import Model, put, symbols
 from dwave.optimization.mathematical import argsort, concatenate
 from dwave.system import LeapHybridNLSampler
+
+from src.utils import parse_mps_structure
 
 
 def create_runtime_use_matrices(
@@ -31,10 +32,8 @@ def create_runtime_use_matrices(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[int], list[int]]:
     """Parse the MPS file and return per-job-mode runtime, resource-use matrices, and start bounds.
 
-    Reads the resource-capacity constraints from the MPS problem to derive how
-    long each (job, mode) pair runs and how many Mechaniker/Techniker units it
-    consumes per time step. Also reads the lower and upper bounds on each job's
-    start time from the ``S_<job>`` decision variables.
+    Delegates to :func:`src.utils.parse_mps_structure` and reshapes the result
+    into the numpy arrays expected by :func:`create_model`.
 
     Args:
         input_path: Path to the ``.mps`` instance file.
@@ -48,100 +47,29 @@ def create_runtime_use_matrices(
         - list[int]: Per-job lower bounds on start times (length 30, 0-indexed by job-1).
         - list[int]: Per-job upper bounds on start times (length 30, 0-indexed by job-1).
     """
-    _, problem = pulp.LpProblem.fromMPS(input_path)
+    profile = parse_mps_structure(input_path)
+    num_jobs = len(profile["jobs"])
+    num_modes = 3
 
-    data = problem.toDict()
+    runtimes_matrix = np.zeros((num_jobs, num_modes))
+    rm_use_matrix = np.zeros((num_jobs, num_modes))
+    rt_use_matrix = np.zeros((num_jobs, num_modes))
 
-    rm = {(j, m, t): [] for j in range(1, 31) for m in range(1, 4) for t in range(213)}
-    rt = {(j, m, t): [] for j in range(1, 31) for m in range(1, 4) for t in range(213)}
-    rm_use = {(j, m, t): 0 for j in range(1, 31) for m in range(1, 4) for t in range(213)}
-    rt_use = {(j, m, t): 0 for j in range(1, 31) for m in range(1, 4) for t in range(213)}
-    for const in data["constraints"]:
-        name = const["name"]
-        if name.startswith("rescap_Mechaniker"):
-            const_time = int(name.split("_")[2])
-            for coeff in const["coefficients"]:
-                coeff_name = coeff["name"]
-                if coeff_name.startswith("x"):
-                    job = int(coeff_name.split("_")[1])
-                    mode = int(coeff_name.split("_")[2])
-                    time = int(coeff_name.split("_")[3])
-                    rm[(job, mode, const_time)].append(time)
-                    value = int(coeff["value"])
-                    rm_use[(job, mode, const_time)] = value
+    for (job, mode), duration in profile["durations"].items():
+        runtimes_matrix[job - 1, mode - 1] = duration
+    for (job, mode), use in profile["mechanic_use"].items():
+        rm_use_matrix[job - 1, mode - 1] = use
+    for (job, mode), use in profile["technician_use"].items():
+        rt_use_matrix[job - 1, mode - 1] = use
 
-        elif name.startswith("rescap_Techniker"):
-            const_time = int(name.split("_")[2])
-            for coeff in const["coefficients"]:
-                coeff_name = coeff["name"]
-                if coeff_name.startswith("x"):
-                    job = int(coeff_name.split("_")[1])
-                    mode = int(coeff_name.split("_")[2])
-                    time = int(coeff_name.split("_")[3])
-                    rt[(job, mode, const_time)].append(time)
-                    value = int(coeff["value"])
-                    rt_use[(job, mode, const_time)] = value
-
-    rm = {k: set(v) for k, v in rm.items()}
-    rt = {k: set(v) for k, v in rt.items()}
-
-    # runtimes per job and mode and resource type
-    rm_times = {(job, mode): 0 for job in range(1, 31) for mode in range(1, 4)}
-    rt_times = {(job, mode): 0 for job in range(1, 31) for mode in range(1, 4)}
-
-    for (j, m, t), v in rm.items():
-        rm_times[(j, m)] = max(rm_times[(j, m)], len(v))
-
-    for (j, m, t), v in rt.items():
-        rt_times[(j, m)] = max(rt_times[(j, m)], len(v))
-
-    # resource use per job, mode, and resource type
-
-    rm_use_total = {(job, mode): 0 for job in range(1, 31) for mode in range(1, 4)}
-    rt_use_total = {(job, mode): 0 for job in range(1, 31) for mode in range(1, 4)}
-
-    for (j, m, t), v in rm_use.items():
-        rm_use_total[(j, m)] = max(v, rm_use_total[(j, m)])
-
-    for (j, m, t), v in rt_use.items():
-        rt_use_total[(j, m)] = max(v, rt_use_total[(j, m)])
-
-    runtimes = {}
-    for k, v in rm_times.items():
-        runtimes[k] = max(v, rt_times[k])
-
-    runtimes_matrix = np.zeros((30, 3))
-
-    for (j, m), v in runtimes.items():
-        runtimes_matrix[j - 1, m - 1] = v
-
-    rm_use_matrix = np.zeros((30, 3))
-    rt_use_matrix = np.zeros((30, 3))
-
-    for (j, m), v in rm_use_total.items():
-        rm_use_matrix[j - 1, m - 1] = v
-
-    for (j, m), v in rt_use_total.items():
-        rt_use_matrix[j - 1, m - 1] = v
-
-    num_jobs = runtimes_matrix.shape[0]
-    lower_bounds = [0] * num_jobs
-    upper_bounds = [0] * num_jobs
-    for var in problem.variables():
-        if var.name.startswith("S_"):
-            job = int(var.name.split("_")[1])
-            lower_bounds[job - 1] = int(var.lowBound) if var.lowBound is not None else 0
-            upper_bounds[job - 1] = int(var.upBound)  if var.upBound  is not None else 0
+    lower_bounds = [profile["lower_bounds"].get(j, 0) for j in range(1, num_jobs + 1)]
+    upper_bounds = [profile["upper_bounds"].get(j, 0) for j in range(1, num_jobs + 1)]
 
     return runtimes_matrix, rm_use_matrix, rt_use_matrix, lower_bounds, upper_bounds
 
 
 def create_precedence_pairs(input_path: str) -> list[tuple[int, int]]:
     """Extract the job precedence pairs from the MPS instance.
-
-    Parses the ``prec`` constraints from the MPS file and returns each
-    predecessor-successor relationship as a ``(j1, j2)`` tuple meaning job
-    ``j1`` must finish before job ``j2`` starts.
 
     Args:
         input_path: Path to the ``.mps`` instance file.
@@ -150,21 +78,7 @@ def create_precedence_pairs(input_path: str) -> list[tuple[int, int]]:
         A list of ``(j1, j2)`` integer tuples (1-indexed job numbers) for
         every precedence constraint in the model.
     """
-    _, problem = pulp.LpProblem.fromMPS(input_path)
-    data = problem.toDict()
-
-    precedence_pairs = []
-
-    for const in data["constraints"]:
-        if const["name"].startswith("prec"):
-            for var in const["coefficients"]:
-                if var["name"].startswith("C"):
-                    v1 = int(var["name"].split("_")[1])
-                elif var["name"].startswith("S"):
-                    v2 = int(var["name"].split("_")[1])
-            precedence_pairs.append((v1, v2))
-
-    return precedence_pairs
+    return parse_mps_structure(input_path)["edges"]
 
 
 def create_model(

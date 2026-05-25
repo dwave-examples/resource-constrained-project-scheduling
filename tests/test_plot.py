@@ -23,7 +23,6 @@ from src.plot import (
     _choose_business_mode,
     _compute_demand,
     _earliest_start_schedule,
-    _parse_mps_structure,
     build_comparison_graph,
     build_input_graph,
     build_solution_graph,
@@ -31,13 +30,13 @@ from src.plot import (
 )
 
 # ---------------------------------------------------------------------------
-# _parse_mps_structure
+# parse_mps_structure
 # ---------------------------------------------------------------------------
 
 
 class TestParseMpsStructure:
     def test_missing_file_returns_empty(self):
-        result = _parse_mps_structure("nonexistent/path/to/file.mps")
+        result = parse_mps_structure("nonexistent/path/to/file.mps")
         assert result["jobs"] == []
         assert result["edges"] == []
         assert result["durations"] == {}
@@ -47,29 +46,23 @@ class TestParseMpsStructure:
         assert result["capacities"]["Techniker"] == 0.0
 
     def test_real_file_has_30_jobs(self, mps_path):
-        result = _parse_mps_structure(mps_path)
+        result = parse_mps_structure(mps_path)
         assert len(result["jobs"]) == 30
 
     def test_real_file_has_precedences(self, mps_path):
-        result = _parse_mps_structure(mps_path)
+        result = parse_mps_structure(mps_path)
         assert len(result["edges"]) > 0
 
     def test_real_file_has_durations(self, mps_path):
-        result = _parse_mps_structure(mps_path)
+        result = parse_mps_structure(mps_path)
         assert len(result["durations"]) > 0
 
     def test_real_file_resource_usage_non_negative(self, mps_path):
-        result = _parse_mps_structure(mps_path)
+        result = parse_mps_structure(mps_path)
         for v in result["mechanic_use"].values():
             assert v >= 0
         for v in result["technician_use"].values():
             assert v >= 0
-
-    def test_public_wrapper_matches_private(self, mps_path):
-        private = _parse_mps_structure(mps_path)
-        public = parse_mps_structure(mps_path)
-        assert private["jobs"] == public["jobs"]
-        assert private["edges"] == public["edges"]
 
 
 # ---------------------------------------------------------------------------
