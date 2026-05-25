@@ -11,6 +11,7 @@ The included instance (`30n20b8.mps`) has 30 jobs, 2 renewable resource types
 optimal objective value is **302**.
 
 ![Demo Example](static/demo.png "Image of demo interface")
+![Demo Solution Example](static/demo2.png "Image of demo interface with solution")
 
 ## Installation
 You can run this example without installation in cloud-based IDEs that support the
@@ -64,7 +65,7 @@ precedence and resource constraint.
 
 **Objective**: Minimize the total cost of hired mechanics and technicians:
 
-$$100 \cdot R_M + 51 \cdot R_T$$
+**100 · R_M + 51 · R_T**
 
 **Constraints**:
 - Each job is executed in exactly one mode.
@@ -80,48 +81,56 @@ $$100 \cdot R_M + 51 \cdot R_T$$
 
 | Symbol | Description |
 |--------|-------------|
-| $J$ | Set of jobs (30 in the provided instance) |
-| $M_j$ | Set of execution modes for job $j$ (up to 3) |
-| $d_{jm}$ | Duration of job $j$ in mode $m$ (time units) |
-| $r^M_{jm}$ | Mechanic units consumed per time unit by job $j$ in mode $m$ |
-| $r^T_{jm}$ | Technician units consumed per time unit by job $j$ in mode $m$ |
-| $\text{prec}$ | Set of precedence pairs $(j_1, j_2)$: $j_1$ must finish before $j_2$ starts |
-| $\bar{R}_M = 40$ | Maximum mechanics available for hire |
-| $\bar{R}_T = 30$ | Maximum technicians available for hire |
+| *J* | Set of jobs (30 in the provided instance) |
+| *M_j* | Set of execution modes for job *j* (up to 3) |
+| *d_jm* | Duration of job *j* in mode *m* (time units) |
+| *r^M_jm* | Mechanic units consumed per time unit by job *j* in mode *m* |
+| *r^T_jm* | Technician units consumed per time unit by job *j* in mode *m* |
+| prec | Set of precedence pairs *(j₁, j₂)*: *j₁* must finish before *j₂* starts |
+| *R̄_M* = 40 | Maximum mechanics available for hire |
+| *R̄_T* = 30 | Maximum technicians available for hire |
 
 ### Variables
 
 | Symbol | Type | Description |
 |--------|------|-------------|
-| $x_{jmt} \in \{0,1\}$ | Binary (MILP) | 1 if job $j$ starts at time $t$ in mode $m$ |
-| $S_j \in \mathbb{Z}_{\geq 0}$ | Integer | Start time of job $j$ |
-| $m_j \in \{1,2,3\}$ | Integer | Execution mode of job $j$ |
-| $R_M \in \{0,\ldots,40\}$ | Integer | Number of mechanics hired |
-| $R_T \in \{0,\ldots,30\}$ | Integer | Number of technicians hired |
+| *x_jmt* ∈ {0,1} | Binary (MILP) | 1 if job *j* starts at time *t* in mode *m* |
+| *S_j* ∈ ℤ≥0 | Integer | Start time of job *j* |
+| *m_j* ∈ {1,2,3} | Integer | Execution mode of job *j* |
+| *R_M* ∈ {0,...,40} | Integer | Number of mechanics hired |
+| *R_T* ∈ {0,...,30} | Integer | Number of technicians hired |
 
 The MILP formulations (HiGHS and SCIP) operate on the time-indexed binary
-variables $x_{jmt}$. The Stride nonlinear formulation uses $S_j$ and $m_j$
+variables *x_jmt*. The Stride nonlinear formulation uses *S_j* and *m_j*
 directly as integer decision variables, producing a much more compact model.
 
 ### Objective
 
-$$\min \quad 100 \cdot R_M + 51 \cdot R_T$$
+```
+min  100 · R_M + 51 · R_T
+```
 
 ### Constraints
 
 **Job execution** (each job runs in exactly one mode at exactly one start time):
 
-$$\sum_{m \in M_j} \sum_{t} x_{jmt} = 1 \quad \forall j \in J$$
+```
+∑_(m ∈ M_j) ∑_t  x_jmt = 1   for all j ∈ J
+```
 
-**Precedence** (job $j_2$ cannot start until $j_1$ finishes):
+**Precedence** (job *j₂* cannot start until *j₁* finishes):
 
-$$S_{j_1} + d_{j_1, m_{j_1}} \leq S_{j_2} \quad \forall (j_1, j_2) \in \text{prec}$$
+```
+S_j₁ + d_(j₁, m_j₁)  ≤  S_j₂   for all (j₁, j₂) ∈ prec
+```
 
 **Resource capacity** (active consumption never exceeds the hired pool):
 
-$$\sum_{j \in J} r^M_{jm_j} \cdot \mathbf{1}[S_j \leq t < S_j + d_{j,m_j}] \leq R_M \quad \forall t$$
+```
+∑_(j ∈ J) r^M_jm_j · 1[S_j ≤ t < S_j + d_(j,m_j)]  ≤  R_M   for all t
 
-$$\sum_{j \in J} r^T_{jm_j} \cdot \mathbf{1}[S_j \leq t < S_j + d_{j,m_j}] \leq R_T \quad \forall t$$
+∑_(j ∈ J) r^T_jm_j · 1[S_j ≤ t < S_j + d_(j,m_j)]  ≤  R_T   for all t
+```
 
 ## Code Overview
 
@@ -144,7 +153,7 @@ input/
 **Three solver formulations** are compared on the same instance:
 
 - **HiGHS (MILP)** — reads the MPS file directly using `highspy`. Uses the
-  classical time-indexed binary formulation where $x_{jmt}$ is a binary variable
+  classical time-indexed binary formulation where *x_jmt* is a binary variable
   for every (job, mode, start-time) triple. Scales poorly with horizon length but
   is a well-understood baseline.
 
