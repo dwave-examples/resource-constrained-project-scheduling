@@ -171,10 +171,6 @@ summary tab with a cross-solver demand comparison and an objective-value table.
 
 ## References
 
-E. Coughlan, M. Lübbecke, and J. Schulz (2010), "A Branch-and-Price Algorithm
-for Multi-mode Resource Leveling". In: *Experimental Algorithms*, Lecture Notes
-in Computer Science, vol. 6049, pp. 226–238, Springer.
-
 The instance `30n20b8.mps` is from the MIPLIB 2017 benchmark collection:
 [miplib.zib.de/instance_details_30n20b8.html](https://miplib.zib.de/instance_details_30n20b8.html)
 

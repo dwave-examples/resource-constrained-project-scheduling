@@ -25,78 +25,16 @@ from dwave.optimization import Model, put, symbols
 from dwave.optimization.mathematical import argsort, concatenate
 from dwave.system import LeapHybridNLSampler
 
-LOWER_BOUNDS = [
-    0,
-    0,
-    6,
-    79,
-    5,
-    83,
-    35,
-    62,
-    67,
-    76,
-    29,
-    35,
-    39,
-    79,
-    103,
-    10,
-    44,
-    89,
-    13,
-    107,
-    19,
-    53,
-    93,
-    56,
-    113,
-    85,
-    103,
-    62,
-    113,
-    116,
-]
-UPPER_BOUNDS = [
-    90,
-    87,
-    93,
-    166,
-    100,
-    175,
-    127,
-    154,
-    159,
-    163,
-    116,
-    186,
-    131,
-    188,
-    190,
-    102,
-    136,
-    181,
-    105,
-    194,
-    111,
-    140,
-    185,
-    143,
-    209,
-    200,
-    207,
-    182,
-    205,
-    208,
-]
 
-
-def create_runtime_use_matrices(input_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Parse the MPS file and return per-job-mode runtime and resource-use matrices.
+def create_runtime_use_matrices(
+    input_path: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[int], list[int]]:
+    """Parse the MPS file and return per-job-mode runtime, resource-use matrices, and start bounds.
 
     Reads the resource-capacity constraints from the MPS problem to derive how
     long each (job, mode) pair runs and how many Mechaniker/Techniker units it
-    consumes per time step.
+    consumes per time step. Also reads the lower and upper bounds on each job's
+    start time from the ``S_<job>`` decision variables.
 
     Args:
         input_path: Path to the ``.mps`` instance file.
@@ -104,9 +42,11 @@ def create_runtime_use_matrices(input_path: str) -> tuple[np.ndarray, np.ndarray
     Returns:
         A tuple containing:
 
-        - np.ndarray: array of job-mode runtimes.
-        - np.ndarray: array of Mechaniker consumption per job-mode.
-        - np.ndarray: array of Techniker consumption per job-mode.
+        - np.ndarray: ``(30, 3)`` array of job-mode runtimes.
+        - np.ndarray: ``(30, 3)`` array of Mechaniker consumption per job-mode.
+        - np.ndarray: ``(30, 3)`` array of Techniker consumption per job-mode.
+        - list[int]: Per-job lower bounds on start times (length 30, 0-indexed by job-1).
+        - list[int]: Per-job upper bounds on start times (length 30, 0-indexed by job-1).
     """
     _, problem = pulp.LpProblem.fromMPS(input_path)
 
@@ -184,14 +124,23 @@ def create_runtime_use_matrices(input_path: str) -> tuple[np.ndarray, np.ndarray
     for (j, m), v in rt_use_total.items():
         rt_use_matrix[j - 1, m - 1] = v
 
-    return runtimes_matrix, rm_use_matrix, rt_use_matrix
+    num_jobs = 30
+    lower_bounds = [0] * num_jobs
+    upper_bounds = [0] * num_jobs
+    for var in problem.variables():
+        if var.name.startswith("S_"):
+            job = int(var.name.split("_")[1])
+            lower_bounds[job - 1] = int(var.lowBound) if var.lowBound is not None else 0
+            upper_bounds[job - 1] = int(var.upBound)  if var.upBound  is not None else 0
+
+    return runtimes_matrix, rm_use_matrix, rt_use_matrix, lower_bounds, upper_bounds
 
 
 def create_precedence_pairs(input_path: str) -> list[tuple[int, int]]:
     """Extract the job precedence pairs from the MPS instance.
 
     Parses the ``prec`` constraints from the MPS file and returns each
-    predecessor–successor relationship as a ``(j1, j2)`` tuple meaning job
+    predecessor-successor relationship as a ``(j1, j2)`` tuple meaning job
     ``j1`` must finish before job ``j2`` starts.
 
     Args:
@@ -369,8 +318,8 @@ def create_model(
 @lru_cache(maxsize=4)
 def _preprocessed_data(
     input_path: str,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tuple[int, int]]]:
-    """Return cached runtime matrices and precedence pairs for the given instance.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[int], list[int], list[tuple[int, int]]]:
+    """Return cached runtime matrices, start bounds, and precedence pairs for the given instance.
 
     Results are memoised so repeated calls with the same path avoid re-parsing
     the MPS file.
@@ -381,14 +330,18 @@ def _preprocessed_data(
     Returns:
         A tuple containing:
 
-        - np.ndarray: array of job-mode runtimes.
-        - np.ndarray: array of Mechaniker consumption per job-mode.
-        - np.ndarray: array of Techniker consumption per job-mode.
-        - list[tuple[int, int]]: list of precedence pairs.
+        - np.ndarray: ``(30, 3)`` array of job-mode runtimes.
+        - np.ndarray: ``(30, 3)`` array of Mechaniker consumption per job-mode.
+        - np.ndarray: ``(30, 3)`` array of Techniker consumption per job-mode.
+        - list[int]: Per-job lower bounds on start times.
+        - list[int]: Per-job upper bounds on start times.
+        - list[tuple[int, int]]: List of ``(j1, j2)`` precedence pairs.
     """
-    runtimes_matrix, rm_use_matrix, rt_use_matrix = create_runtime_use_matrices(input_path)
+    runtimes_matrix, rm_use_matrix, rt_use_matrix, lower_bounds, upper_bounds = (
+        create_runtime_use_matrices(input_path)
+    )
     precedence_pairs = create_precedence_pairs(input_path)
-    return runtimes_matrix, rm_use_matrix, rt_use_matrix, precedence_pairs
+    return runtimes_matrix, rm_use_matrix, rt_use_matrix, lower_bounds, upper_bounds, precedence_pairs
 
 
 def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
@@ -422,13 +375,13 @@ def solve_stride(time_limit: float, input_path: str) -> dict[str, Any]:
         }
 
     try:
-        runtimes_matrix, rm_use_matrix, rt_use_matrix, precedence_pairs = _preprocessed_data(
-            input_path
+        runtimes_matrix, rm_use_matrix, rt_use_matrix, lower_bounds, upper_bounds, precedence_pairs = (
+            _preprocessed_data(input_path)
         )
 
         model, starts, modes = create_model(
-            LOWER_BOUNDS,
-            UPPER_BOUNDS,
+            lower_bounds,
+            upper_bounds,
             runtimes_matrix,
             rm_use_matrix,
             rt_use_matrix,

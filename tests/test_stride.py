@@ -35,20 +35,34 @@ from src.stride import (
 
 class TestCreateRuntimeUseMatrices:
     def test_shapes(self, mps_path):
-        rt, rm, rtech = create_runtime_use_matrices(mps_path)
-        assert rt.shape == (30, 3)
-        assert rm.shape == (30, 3)
+        rt, rm, rtech, lb, ub = create_runtime_use_matrices(mps_path)
+        assert rt.shape    == (30, 3)
+        assert rm.shape    == (30, 3)
         assert rtech.shape == (30, 3)
 
     def test_non_negative_values(self, mps_path):
-        rt, rm, rtech = create_runtime_use_matrices(mps_path)
-        assert (rt >= 0).all()
-        assert (rm >= 0).all()
+        rt, rm, rtech, lb, ub = create_runtime_use_matrices(mps_path)
+        assert (rt    >= 0).all()
+        assert (rm    >= 0).all()
         assert (rtech >= 0).all()
 
     def test_runtimes_are_positive_for_at_least_some_jobs(self, mps_path):
-        rt, _, _ = create_runtime_use_matrices(mps_path)
+        rt, _, _, _, _ = create_runtime_use_matrices(mps_path)
         assert rt.sum() > 0
+
+    def test_bounds_length(self, mps_path):
+        _, _, _, lb, ub = create_runtime_use_matrices(mps_path)
+        assert len(lb) == 30
+        assert len(ub) == 30
+
+    def test_lower_bounds_non_negative(self, mps_path):
+        _, _, _, lb, _ = create_runtime_use_matrices(mps_path)
+        assert all(v >= 0 for v in lb)
+
+    def test_upper_bounds_exceed_lower(self, mps_path):
+        _, _, _, lb, ub = create_runtime_use_matrices(mps_path)
+        for lo, hi in zip(lb, ub):
+            assert hi >= lo
 
 
 # ---------------------------------------------------------------------------
@@ -83,9 +97,9 @@ class TestCreatePrecedencePairs:
 
 
 class TestPreprocessedData:
-    def test_returns_four_tuple(self, mps_path):
+    def test_returns_six_tuple(self, mps_path):
         result = _preprocessed_data(mps_path)
-        assert len(result) == 4
+        assert len(result) == 6
 
     def test_cached_second_call_same_object(self, mps_path):
         r1 = _preprocessed_data(mps_path)
@@ -113,6 +127,8 @@ class TestSolveStride:
         runtimes = np.zeros((30, 3))
         rm_use = np.zeros((30, 3))
         rt_use = np.zeros((30, 3))
+        lower = [0] * 30
+        upper = [100] * 30
         pairs = [(1, 2)]
 
         fake_starts = MagicMock()
@@ -133,7 +149,7 @@ class TestSolveStride:
         fake_sampler_instance = MagicMock()
 
         with (
-            patch("src.stride._preprocessed_data", return_value=(runtimes, rm_use, rt_use, pairs)),
+            patch("src.stride._preprocessed_data", return_value=(runtimes, rm_use, rt_use, lower, upper, pairs)),
             patch("src.stride.create_model", return_value=(fake_model, fake_starts, fake_modes)),
             patch("src.stride.LeapHybridNLSampler", return_value=fake_sampler_instance),
         ):
@@ -153,6 +169,8 @@ class TestSolveStride:
         runtimes = np.zeros((30, 3))
         rm_use = np.zeros((30, 3))
         rt_use = np.zeros((30, 3))
+        lower = [0] * 30
+        upper = [100] * 30
         pairs = []
 
         fake_starts = MagicMock()
@@ -169,7 +187,7 @@ class TestSolveStride:
         fake_model.iter_constraints.return_value = []
 
         with (
-            patch("src.stride._preprocessed_data", return_value=(runtimes, rm_use, rt_use, pairs)),
+            patch("src.stride._preprocessed_data", return_value=(runtimes, rm_use, rt_use, lower, upper, pairs)),
             patch("src.stride.create_model", return_value=(fake_model, fake_starts, fake_modes)),
             patch("src.stride.LeapHybridNLSampler", return_value=MagicMock()),
         ):
