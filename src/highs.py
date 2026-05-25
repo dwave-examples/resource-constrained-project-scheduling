@@ -15,10 +15,11 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import highspy as hs
+
+from src.utils import extract_assignment
 
 
 def _extract_assignment_highs(highs_model: Any) -> tuple[dict[int, int], dict[int, int]]:
@@ -57,22 +58,7 @@ def _extract_assignment_highs(highs_model: Any) -> tuple[dict[int, int], dict[in
     if not names or not values:
         return {}, {}
 
-    pattern = re.compile(r"x_(\d+)_(\d+)_(\d+)")
-    best_choice: dict[int, tuple[float, int, int]] = {}
-
-    for name, value in zip(names, values):
-        match = pattern.fullmatch(name)
-        if not match:
-            continue
-        job = int(match.group(1))
-        mode = int(match.group(2))
-        start = int(match.group(3))
-        if job not in best_choice or float(value) > best_choice[job][0]:
-            best_choice[job] = (float(value), mode, start)
-
-    starts = {job: choice[2] for job, choice in best_choice.items() if choice[0] > 0.5}
-    modes = {job: choice[1] for job, choice in best_choice.items() if choice[0] > 0.5}
-    return starts, modes
+    return extract_assignment(zip(names, values))
 
 
 def solve_highs(time_limit: float, input_path: str) -> dict[str, Any]:
