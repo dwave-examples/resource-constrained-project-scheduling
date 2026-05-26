@@ -86,6 +86,7 @@ def parse_mps_structure(input_path: str) -> dict:
         "capacities": {"Mechaniker": 0.0, "Techniker": 0.0},
         "lower_bounds": {},
         "upper_bounds": {},
+        "hire_rates": {"Mechaniker": 0.0, "Techniker": 0.0},
     }
     path = Path(input_path)
     if not path.exists() or not path.is_file():
@@ -145,10 +146,19 @@ def parse_mps_structure(input_path: str) -> dict:
     rm_use: dict = defaultdict(float)
     rt_use: dict = defaultdict(float)
     x_pattern = re.compile(r"x_(\d+)_(\d+)_(\d+)")
+    hire_rates: dict[str, float] = {}
 
     for line in columns_lines:
         tokens = line.split()
         if len(tokens) < 3:
+            continue
+        if tokens[0] in ("R_Mechaniker", "R_Techniker"):
+            for i in range(1, len(tokens) - 1, 2):
+                if tokens[i] == "Obj":
+                    try:
+                        hire_rates[tokens[0]] = float(tokens[i + 1])
+                    except ValueError:
+                        pass
             continue
         m_var = x_pattern.match(tokens[0])
         if not m_var:
@@ -208,4 +218,8 @@ def parse_mps_structure(input_path: str) -> dict:
         "capacities": capacities,
         "lower_bounds": lower_bounds,
         "upper_bounds": upper_bounds,
+        "hire_rates": {
+            "Mechaniker": hire_rates.get("R_Mechaniker", 0.0),
+            "Techniker": hire_rates.get("R_Techniker", 0.0),
+        },
     }

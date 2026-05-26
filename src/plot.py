@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+import math
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -41,6 +42,28 @@ _SOLVER_COLORS = {
     "SCIP": "#2d4376",
     "Stride": "#17BEBB",
 }
+
+
+def _hiring_cost_text(r_m: int, r_t: int, mech_rate: float, tech_rate: float) -> str:
+    """Return an HTML hiring cost breakdown for use in a Plotly annotation.
+
+    Args:
+        r_m: Number of mechanics hired.
+        r_t: Number of technicians hired.
+        mech_rate: Cost per mechanic.
+        tech_rate: Cost per technician.
+
+    Returns:
+        A three-line HTML string with per-resource costs and a bold total.
+    """
+    mech_cost = int(r_m * mech_rate)
+    tech_cost = int(r_t * tech_rate)
+    total = mech_cost + tech_cost
+    return (
+        f"{r_m} mechanics @ {int(mech_rate)} = {mech_cost}<br>"
+        f"{r_t} technicians @ {int(tech_rate)} = {tech_cost}<br>"
+        f"<b>Total: {total}</b>"
+    )
 
 
 def _choose_business_mode(job: int, profile: dict) -> int:
@@ -183,6 +206,10 @@ def build_input_graph(input_path: str) -> go.Figure:
             mech_demand[t] += mech_use
             tech_demand[t] += tech_use
 
+    hire_rates = profile.get("hire_rates", {"Mechaniker": 100.0, "Techniker": 51.0})
+    r_m = math.ceil(max(mech_demand, default=0))
+    r_t = math.ceil(max(tech_demand, default=0))
+
     fig = make_subplots(
         rows=2,
         cols=1,
@@ -269,7 +296,7 @@ def build_input_graph(input_path: str) -> go.Figure:
 
     fig.update_layout(
         template="plotly_white",
-        margin={"l": 20, "r": 20, "t": 30, "b": 20},
+        margin={"l": 20, "r": 20, "t": 30, "b": 90},
         paper_bgcolor="white",
         plot_bgcolor="white",
         showlegend=True,
@@ -286,6 +313,21 @@ def build_input_graph(input_path: str) -> go.Figure:
         categoryarray=[f"Job {job}" for job in reversed(jobs_sorted)],
     )
     fig.update_yaxes(title_text="Resource Units", row=2, col=1)
+    fig.add_annotation(
+        text=(
+            "<b>Cost (unoptimized):</b><br>"
+            + _hiring_cost_text(r_m, r_t, hire_rates["Mechaniker"], hire_rates["Techniker"])
+        ),
+        xref="paper",
+        yref="paper",
+        x=1,
+        y=0.3,
+        showarrow=False,
+        align="left",
+        font={"size": 13},
+        xanchor="left",
+        yanchor="top",
+    )
 
     return fig
 
@@ -393,7 +435,7 @@ def build_comparison_graph(
     fig.update_layout(
         template="plotly_white",
         height=380,
-        margin={"l": 20, "r": 20, "t": 40, "b": 20},
+        margin={"l": 20, "r": 20, "t": 30, "b": 20},
         paper_bgcolor="white",
         plot_bgcolor="white",
         legend={"orientation": "h", "y": 1.15, "x": 0},
@@ -456,6 +498,10 @@ def build_solution_graph(
         for t in range(s_t, min(f_t, len(mech_demand))):
             mech_demand[t] += mech_use
             tech_demand[t] += tech_use
+
+    hire_rates = profile.get("hire_rates", {"Mechaniker": 100.0, "Techniker": 51.0})
+    r_m = math.ceil(max(mech_demand, default=0))
+    r_t = math.ceil(max(tech_demand, default=0))
 
     fig = make_subplots(
         rows=2,
@@ -544,7 +590,7 @@ def build_solution_graph(
     fig.update_layout(
         title=title,
         template="plotly_white",
-        margin={"l": 20, "r": 20, "t": 40, "b": 20},
+        margin={"l": 20, "r": 20, "t": 40, "b": 90},
         paper_bgcolor="white",
         plot_bgcolor="white",
         showlegend=True,
@@ -561,5 +607,20 @@ def build_solution_graph(
         categoryarray=[f"Job {job}" for job in reversed(jobs_sorted)],
     )
     fig.update_yaxes(title_text="Resource Units", row=2, col=1)
+    fig.add_annotation(
+        text=(
+            "<b>Hiring cost (optimized):</b><br>"
+            + _hiring_cost_text(r_m, r_t, hire_rates["Mechaniker"], hire_rates["Techniker"])
+        ),
+        xref="paper",
+        yref="paper",
+        x=1,
+        y=0.3,
+        showarrow=False,
+        align="left",
+        font={"size": 13},
+        xanchor="left",
+        yanchor="top",
+    )
 
     return fig

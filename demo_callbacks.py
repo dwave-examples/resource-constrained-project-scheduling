@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import NamedTuple
 
 import dash
@@ -33,7 +34,8 @@ from demo_interface import (
 )
 from src.demo_enums import SolverType
 from src.demo_runner import compare_formulations, summarize_runs
-from src.plot import build_comparison_graph, build_input_graph, build_solution_graph
+from src.plot import _compute_demand, build_comparison_graph, build_input_graph, build_solution_graph
+from src.utils import parse_mps_structure
 
 
 @dash.callback(
@@ -564,7 +566,30 @@ def render_aggregate_results(
     ]
     min_energy = min(ok_energies) if ok_energies else None
 
-    summary_table = comparison_summary_table(summary_rows, min_energy, known_optimal)
+    # Compute per-solver peak mechanics/technicians for the cost breakdown table.
+    _label_map = {
+        "HiGHS": SolverType.HIGHS.label,
+        "SCIP": SolverType.SCIP.label,
+        "Stride": SolverType.STRIDE.label,
+    }
+    solver_peaks: dict[str, tuple[int, int]] = {}
+    mech_rate = 100
+    tech_rate = 51
+    if solver_schedules and selected_input:
+        _profile = parse_mps_structure(selected_input)
+        _hire_rates = _profile.get("hire_rates", {"Mechaniker": 100.0, "Techniker": 51.0})
+        mech_rate = int(_hire_rates["Mechaniker"]) or 100
+        tech_rate = int(_hire_rates["Techniker"]) or 51
+        for _store_name, (_starts, _modes) in solver_schedules.items():
+            _mech, _tech, _ = _compute_demand(_profile, _starts, _modes)
+            _r_m = math.ceil(max(_mech, default=0))
+            _r_t = math.ceil(max(_tech, default=0))
+            _label = _label_map.get(_store_name, _store_name)
+            solver_peaks[_label] = (_r_m, _r_t)
+
+    summary_table = comparison_summary_table(
+        summary_rows, min_energy, known_optimal, solver_peaks, mech_rate, tech_rate
+    )
     fig = build_comparison_graph(selected_input, solver_schedules) if solver_schedules else None
     results = results_layout(comparison_panel(fig), summary_table)
 

@@ -363,6 +363,9 @@ def comparison_summary_table(
     summary_rows: list[dict],
     min_energy: int | float | None,
     known_optimal: int | float | None,
+    solver_peaks: dict[str, tuple[int, int]] | None = None,
+    mech_rate: int = 100,
+    tech_rate: int = 51,
 ) -> html.Table:
     """Build the highlighted Comparison Summary table.
 
@@ -375,6 +378,10 @@ def comparison_summary_table(
             row highlighting. Pass ``None`` if no feasible solutions exist.
         known_optimal: The known optimal objective value for the instance, or
             ``None`` if unknown.
+        solver_peaks: Mapping of formulation label → ``(peak_mechanics, peak_technicians)``
+            used to render the cost breakdown columns. Pass ``None`` to omit.
+        mech_rate: Cost per mechanic (default 100).
+        tech_rate: Cost per technician (default 51).
 
     Returns:
         An html.Table with styled rows and an ``(optimal)`` annotation where
@@ -396,7 +403,24 @@ def comparison_summary_table(
             return "row-highlight-best"
         return ""
 
-    headers = ["Formulation", "Runs", "OK Runs", "Best Energy", "Avg Energy"]
+    def fmt_peak(formulation: str, idx: int, rate: int) -> str:
+        if solver_peaks is None:
+            return "–"
+        peaks = solver_peaks.get(formulation)
+        if peaks is None:
+            return "–"
+        count = peaks[idx]
+        return f"{count * rate}"
+
+    headers = [
+        "Formulation",
+        "Runs",
+        "OK Runs",
+        "Mechanics Cost",
+        "Technicians Cost",
+        "Best Energy",
+        "Avg Energy",
+    ]
     return html.Table(
         className="problem-details-table",
         children=[
@@ -409,6 +433,8 @@ def comparison_summary_table(
                             html.Td(str(row["formulation"])),
                             html.Td(str(row["runs"])),
                             html.Td(str(row["ok_runs"])),
+                            html.Td(fmt_peak(row["formulation"], 0, mech_rate)),
+                            html.Td(fmt_peak(row["formulation"], 1, tech_rate)),
                             html.Td(fmt_energy(row["best_energy"])),
                             html.Td(str(row["avg_energy"])),
                         ],
@@ -436,15 +462,14 @@ def results_layout(comparison_element: dcc.Graph | html.H4, summary_table: html.
         className="results-layout",
         children=[
             html.Div(
-                className="results-layout__graph",
-                children=comparison_element,
-            ),
-            html.Div(
                 className="results-layout__table",
                 children=[
-                    html.H3("Comparison Summary"),
                     summary_table,
                 ],
+            ),
+            html.Div(
+                className="results-layout__graph",
+                children=comparison_element,
             ),
         ],
     )
