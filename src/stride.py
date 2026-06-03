@@ -118,7 +118,7 @@ def create_model(
     for j1, j2 in precedence_pairs:
         model.add_constraint(
             starts[model.constant(j1 - 1)]
-            + runtimes_matrix_c[model.constant(j1 - 1), modes[model.constant(j1)]]
+            + runtimes_matrix_c[model.constant(j1 - 1), modes[model.constant(j1 - 1)]]
             - starts[model.constant(j2 - 1)]
             <= 0
         )
