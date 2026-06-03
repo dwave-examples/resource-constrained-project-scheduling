@@ -313,19 +313,27 @@ def solver_not_selected_panel(solver_name: str) -> html.Div:
     return html.Div([html.P(f"{solver_name} was not selected.")])
 
 
-def solver_solution_panel(has_solution: bool, figure: go.Figure) -> dcc.Graph | html.P:
+def solver_solution_panel(has_solution: bool, figure: go.Figure, solver_index: str) -> dcc.Graph | html.P:
     """Return a graph of the solver's best solution, or a 'no solution' message.
 
     Args:
         has_solution: Whether the solver produced a feasible schedule.
         figure: A Plotly figure to display when ``has_solution`` is ``True``.
+        solver_index: Short key identifying this solver (e.g. ``"highs"``), used
+            as the ``index`` of the pattern-matching graph ID.
 
     Returns:
         A dcc.Graph wrapping the figure, or an html.P placeholder if no solution
         was found within the time limit.
     """
     if has_solution:
-        return dcc.Graph(figure=figure, config={"displayModeBar": False}, responsive=True)
+        return dcc.Graph(
+            id={"type": "solver-graph", "index": solver_index},
+            figure=figure,
+            config={"displayModeBar": False},
+            responsive=True,
+            clear_on_unhover=True,
+        )
     return html.H2(
         "No solution found within the given time limit.",
         className="placeholder-text",
@@ -613,6 +621,7 @@ def create_interface() -> html.Div:
                                                         parent_className="input",
                                                         type="circle",
                                                         color=THEME_COLOR,
+                                                        delay_show=300,
                                                         # A Dash callback (in app.py) will generate content in the Div below
                                                         children=html.Div(
                                                             id="input",
@@ -620,6 +629,7 @@ def create_interface() -> html.Div:
                                                                 id="input-graph",
                                                                 config={"displayModeBar": False},
                                                                 responsive=True,
+                                                                clear_on_unhover=True,
                                                             ),
                                                         ),
                                                     ),
@@ -638,6 +648,7 @@ def create_interface() -> html.Div:
                                                         parent_className="results",
                                                         type="circle",
                                                         color=THEME_COLOR,
+                                                        delay_show=300,
                                                         # A Dash callback will generate content in the Div below
                                                         children=html.Div(id="results"),
                                                     ),
@@ -656,6 +667,7 @@ def create_interface() -> html.Div:
                                                         parent_className="results",
                                                         type="circle",
                                                         color=THEME_COLOR,
+                                                        delay_show=300,
                                                         children=html.Div(id="highs-results"),
                                                     ),
                                                 ],
@@ -673,6 +685,7 @@ def create_interface() -> html.Div:
                                                         parent_className="results",
                                                         type="circle",
                                                         color=THEME_COLOR,
+                                                        delay_show=300,
                                                         children=html.Div(id="scip-results"),
                                                     ),
                                                 ],
@@ -690,6 +703,7 @@ def create_interface() -> html.Div:
                                                         parent_className="results",
                                                         type="circle",
                                                         color=THEME_COLOR,
+                                                        delay_show=300,
                                                         children=html.Div(id="stride-results"),
                                                     ),
                                                 ],

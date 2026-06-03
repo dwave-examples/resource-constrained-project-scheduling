@@ -249,6 +249,7 @@ def build_input_graph(input_path: str) -> go.Figure:
                         profile["mechanic_use"].get((job, mode_val), 0),
                         profile["technician_use"].get((job, mode_val), 0),
                         duration_by_job[job],
+                        start_by_job[job],
                     ]
                     for job in mode_jobs
                 ],
@@ -256,7 +257,8 @@ def build_input_graph(input_path: str) -> go.Figure:
                     "<b>%{y}</b><br>Start: %{base}<br>Duration: %{customdata[3]}<br>"
                     "Mode: %{customdata[0]}<br>"
                     "Mechanics: %{customdata[1]}<br>"
-                    "Technicians: %{customdata[2]}<extra></extra>"
+                    "Technicians: %{customdata[2]}<br>"
+                    "Earliest start: %{customdata[4]}<extra></extra>"
                 ),
                 name=f"{res_type.capitalize()} – Mode {mode_val}",
                 legendgroup=res_type,
@@ -266,6 +268,25 @@ def build_input_graph(input_path: str) -> go.Figure:
             row=1,
             col=1,
         )
+
+    fig.add_trace(
+        go.Scatter(
+            x=[start_by_job[job] for job in jobs_sorted],
+            y=[f"Job {job}" for job in jobs_sorted],
+            mode="markers",
+            marker={
+                "symbol": "triangle-right",
+                "size": 10,
+                "color": "#444444",
+                "opacity": 0.7,
+            },
+            name="Earliest start",
+            hoverinfo="skip",
+            showlegend=True,
+        ),
+        row=1,
+        col=1,
+    )
 
     x_axis = list(range(len(mech_demand)))
 
@@ -313,6 +334,18 @@ def build_input_graph(input_path: str) -> go.Figure:
         categoryarray=[f"Job {job}" for job in reversed(jobs_sorted)],
     )
     fig.update_yaxes(title_text="Resource Units", row=2, col=1)
+    fig.add_annotation(
+        text="<i>Hover over a job to highlight<br>its predecessors</i>",
+        xref="paper",
+        yref="paper",
+        x=1,
+        y=0.6,
+        showarrow=False,
+        align="left",
+        font={"size": 12, "color": "#666666"},
+        xanchor="left",
+        yanchor="bottom",
+    )
     fig.add_annotation(
         text=(
             "<b>Cost (unoptimized):</b><br>"
@@ -367,6 +400,33 @@ def _compute_demand(
             mech[t] += float(profile["mechanic_use"].get((job, m), 0.0))
             tech[t] += float(profile["technician_use"].get((job, m), 0.0))
     return mech, tech, horizon
+
+
+def _input_demand_peaks(input_path: str) -> tuple[float, float]:
+    """Return the peak mechanic and technician demand under the ASAP (input) schedule.
+
+    Args:
+        input_path: Path to the MPS-format problem file.
+
+    Returns:
+        A tuple of (peak_mech, peak_tech) demand values.
+    """
+    profile = parse_mps_structure(input_path)
+    if not profile["jobs"]:
+        return 0.0, 0.0
+    start_by_job, duration_by_job, mode_by_job = _earliest_start_schedule(profile)
+    finish_by_job = {job: start_by_job[job] + duration_by_job[job] for job in profile["jobs"]}
+    horizon = max(finish_by_job.values()) if finish_by_job else 1
+    mech_demand = [0.0] * max(1, horizon)
+    tech_demand = [0.0] * max(1, horizon)
+    for job in profile["jobs"]:
+        mode = mode_by_job[job]
+        s = start_by_job[job]
+        f = finish_by_job[job]
+        for t in range(s, min(f, len(mech_demand))):
+            mech_demand[t] += float(profile["mechanic_use"].get((job, mode), 0.0))
+            tech_demand[t] += float(profile["technician_use"].get((job, mode), 0.0))
+    return max(mech_demand, default=0.0), max(tech_demand, default=0.0)
 
 
 def build_comparison_graph(
@@ -483,6 +543,8 @@ def build_solution_graph(
         job: max(1, int(profile["durations"].get((job, selected_mode[job]), 1))) for job in jobs
     }
 
+    asap_start, _, _ = _earliest_start_schedule(profile)
+
     jobs_sorted = sorted(jobs, key=lambda job_id: (start[job_id], job_id))
     finish_by_job = {job: start[job] + duration[job] for job in jobs}
     horizon = max(finish_by_job.values()) if finish_by_job else 1
@@ -542,6 +604,7 @@ def build_solution_graph(
                         profile["mechanic_use"].get((job, mode_val), 0),
                         profile["technician_use"].get((job, mode_val), 0),
                         duration[job],
+                        asap_start.get(job, 0),
                     ]
                     for job in mode_jobs
                 ],
@@ -549,7 +612,8 @@ def build_solution_graph(
                     "<b>%{y}</b><br>Start: %{base}<br>Duration: %{customdata[3]}<br>"
                     "Mode: %{customdata[0]}<br>"
                     "Mechanics: %{customdata[1]}<br>"
-                    "Technicians: %{customdata[2]}<extra></extra>"
+                    "Technicians: %{customdata[2]}<br>"
+                    "Earliest start: %{customdata[4]}<extra></extra>"
                 ),
                 name=f"{res_type.capitalize()} – Mode {mode_val}",
                 legendgroup=res_type,
@@ -560,7 +624,29 @@ def build_solution_graph(
             col=1,
         )
 
+    fig.add_trace(
+        go.Scatter(
+            x=[asap_start.get(job, 0) for job in jobs_sorted],
+            y=[f"Job {job}" for job in jobs_sorted],
+            mode="markers",
+            marker={
+                "symbol": "triangle-right",
+                "size": 10,
+                "color": "#444444",
+                "opacity": 0.7,
+            },
+            name="Earliest start",
+            hoverinfo="skip",
+            showlegend=True,
+        ),
+        row=1,
+        col=1,
+    )
+
     x_axis = list(range(len(mech_demand)))
+
+    input_mech_peak, input_tech_peak = _input_demand_peaks(input_path)
+    demand_ymax = math.ceil(max(input_mech_peak, input_tech_peak))
 
     fig.add_trace(
         go.Scatter(
@@ -606,7 +692,19 @@ def build_solution_graph(
         categoryorder="array",
         categoryarray=[f"Job {job}" for job in reversed(jobs_sorted)],
     )
-    fig.update_yaxes(title_text="Resource Units", row=2, col=1)
+    fig.update_yaxes(title_text="Resource Units", row=2, col=1, range=[0, demand_ymax])
+    fig.add_annotation(
+        text="<i>Hover over a job to highlight<br>its predecessors</i>",
+        xref="paper",
+        yref="paper",
+        x=1,
+        y=0.6,
+        showarrow=False,
+        align="left",
+        font={"size": 12, "color": "#666666"},
+        xanchor="left",
+        yanchor="bottom",
+    )
     fig.add_annotation(
         text=(
             "<b>Hiring cost (optimized):</b><br>"

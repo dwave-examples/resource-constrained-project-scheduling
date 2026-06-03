@@ -19,7 +19,7 @@ from typing import NamedTuple
 
 import dash
 import plotly.graph_objects as go
-from dash import MATCH, ctx, html
+from dash import MATCH, Patch, ctx, html
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 
@@ -238,6 +238,13 @@ def update_button_visibility(
 # ---------------------------------------------------------------------------
 
 
+_SOLVER_INDEX: dict[str, str] = {
+    "HiGHS (MILP)": "highs",
+    "SCIP (MILP)": "scip",
+    "Stride Quantum Hybrid": "stride",
+}
+
+
 def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
     """Build the content for a single solver's results tab.
 
@@ -266,7 +273,7 @@ def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
         if has_solution
         else None
     )
-    return solver_solution_panel(has_solution, figure)
+    return solver_solution_panel(has_solution, figure, _SOLVER_INDEX.get(label, label.lower()))
 
 
 def _solver_tab_class(rows: list[dict]) -> str:
@@ -594,3 +601,163 @@ def render_aggregate_results(
     results = results_layout(comparison_panel(fig), summary_table)
 
     return results, False, "Results"
+
+
+# ---------------------------------------------------------------------------
+# 7. Predecessor highlighting — hover over any job bar to dim all unrelated jobs.
+#    clear_on_unhover=True on each solver graph resets hoverData to None when
+#    the cursor leaves, which triggers this callback and restores full opacity.
+# ---------------------------------------------------------------------------
+
+
+def _compute_ancestors(job: int, edges: list[tuple[int, int]]) -> set[int]:
+    """Return all transitive predecessors of ``job`` via a backwards BFS.
+
+    Args:
+        job: The job whose ancestors are to be found.
+        edges: List of ``(src, dst)`` precedence pairs.
+
+    Returns:
+        Set of job IDs that must complete before ``job`` can start.
+    """
+    predecessors: dict[int, list[int]] = {}
+    for src, dst in edges:
+        predecessors.setdefault(dst, []).append(src)
+
+    visited: set[int] = set()
+    queue = [job]
+    while queue:
+        node = queue.pop()
+        for pred in predecessors.get(node, []):
+            if pred not in visited:
+                visited.add(pred)
+                queue.append(pred)
+    return visited
+
+
+@dash.callback(
+    Output({"type": "solver-graph", "index": MATCH}, "figure"),
+    Input({"type": "solver-graph", "index": MATCH}, "hoverData"),
+    State({"type": "solver-graph", "index": MATCH}, "figure"),
+    State("input-file-select", "value"),
+    prevent_initial_call=True,
+)
+def highlight_predecessors(
+    hover_data: dict | None,
+    current_figure: dict,
+    input_file: str,
+) -> Patch:
+    """Dim all bars except the hovered job and its predecessors.
+
+    Fires on every hover event.  When the cursor leaves the graph
+    (``hover_data`` is ``None`` due to ``clear_on_unhover=True``), all bar
+    opacities are restored to 1.
+
+    Args:
+        hover_data: Plotly hoverData from the solver graph, or ``None``.
+        current_figure: Current serialized figure dict (used for reset detection).
+        input_file: Path to the selected MPS input file.
+
+    Returns:
+        A ``Patch`` that updates per-bar marker opacities in-place.
+    """
+    p = Patch()
+
+    # --- Reset: mouse left the chart ---
+    if hover_data is None:
+        for i, trace in enumerate(current_figure.get("data", [])):
+            if trace.get("type") == "bar":
+                p["data"][i]["marker"]["opacity"] = [1.0] * len(trace.get("y", []))
+        return p
+
+    # --- Parse hovered job ---
+    point = hover_data["points"][0]
+    y_label = point.get("y", "")
+    if not isinstance(y_label, str) or not y_label.startswith("Job "):
+        raise PreventUpdate
+
+    try:
+        hovered_job = int(y_label.split()[-1])
+    except ValueError:
+        raise PreventUpdate
+
+    # --- Compute highlight set (hovered job + all ancestors) ---
+    profile = parse_mps_structure(input_file or "")
+    ancestors = _compute_ancestors(hovered_job, profile.get("edges", []))
+    highlight_set = ancestors | {hovered_job}
+
+    # --- Apply per-bar opacity to every bar trace ---
+    for i, trace in enumerate(current_figure.get("data", [])):
+        if trace.get("type") != "bar":
+            continue
+        opacities = [
+            1.0 if (
+                isinstance(y, str)
+                and y.startswith("Job ")
+                and int(y.split()[-1]) in highlight_set
+            ) else 0.15
+            for y in trace.get("y", [])
+        ]
+        p["data"][i]["marker"]["opacity"] = opacities
+
+    return p
+
+
+@dash.callback(
+    Output("input-graph", "figure", allow_duplicate=True),
+    Input("input-graph", "hoverData"),
+    State("input-graph", "figure"),
+    State("input-file-select", "value"),
+    prevent_initial_call=True,
+)
+def highlight_predecessors_input(
+    hover_data: dict | None,
+    current_figure: dict,
+    input_file: str,
+) -> Patch:
+    """Dim all bars except the hovered job and its predecessors on the Input tab.
+
+    Args:
+        hover_data: Plotly hoverData from the input graph, or ``None``.
+        current_figure: Current serialized figure dict.
+        input_file: Path to the selected MPS input file.
+
+    Returns:
+        A ``Patch`` that updates per-bar marker opacities in-place.
+    """
+    p = Patch()
+
+    if hover_data is None:
+        for i, trace in enumerate(current_figure.get("data", [])):
+            if trace.get("type") == "bar":
+                p["data"][i]["marker"]["opacity"] = [1.0] * len(trace.get("y", []))
+        return p
+
+    point = hover_data["points"][0]
+    y_label = point.get("y", "")
+    if not isinstance(y_label, str) or not y_label.startswith("Job "):
+        raise PreventUpdate
+
+    try:
+        hovered_job = int(y_label.split()[-1])
+    except ValueError:
+        raise PreventUpdate
+
+    profile = parse_mps_structure(input_file or "")
+    ancestors = _compute_ancestors(hovered_job, profile.get("edges", []))
+    highlight_set = ancestors | {hovered_job}
+
+    for i, trace in enumerate(current_figure.get("data", [])):
+        if trace.get("type") != "bar":
+            continue
+        opacities = [
+            1.0 if (
+                isinstance(y, str)
+                and y.startswith("Job ")
+                and int(y.split()[-1]) in highlight_set
+            ) else 0.15
+            for y in trace.get("y", [])
+        ]
+        p["data"][i]["marker"]["opacity"] = opacities
+
+    return p
