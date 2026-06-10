@@ -20,7 +20,7 @@ APP_TITLE = "Resource-Constrained Project Scheduling"
 MAIN_HEADER = "Resource-Constrained Project Scheduling"
 DESCRIPTION = """\
 Compare objective values and solver statuses for three formulations on the same RCPSP instance:
-HiGHS MILP, SCIP MILP, and D-Wave Stride Quantum Hybrid Solver.
+HiGHS MILP, SCIP MILP, and D-Wave Stride\u2122 Hybrid Solver.
 """
 
 INPUTS = ["input/30n20b8.mps"]

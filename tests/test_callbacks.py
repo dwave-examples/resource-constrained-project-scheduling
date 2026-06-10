@@ -299,7 +299,7 @@ class TestRunStrideCallback:
     def test_selected_calls_compare_formulations(self, mps_path):
         fake_row = {
             **FAKE_RESULT,
-            "formulation": "Stride Quantum Hybrid",
+            "formulation": "Stride Hybrid Solver",
             "run": 1,
             "starts": {1: 0},
             "modes": {1: 1},

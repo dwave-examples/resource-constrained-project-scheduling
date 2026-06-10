@@ -34,7 +34,7 @@ class TestSolverType:
         assert SolverType.SCIP.label == "SCIP (MILP)"
 
     def test_stride_label(self):
-        assert SolverType.STRIDE.label == "Stride Quantum Hybrid"
+        assert SolverType.STRIDE.label == "Stride Hybrid Solver"
 
     def test_from_int(self):
         assert SolverType(0) is SolverType.HIGHS

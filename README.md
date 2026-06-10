@@ -2,7 +2,7 @@
 
 This demo solves a **Resource-Constrained Project Scheduling Problem (RCPSP)** and
 compares three solvers side-by-side: HiGHS (MILP), SCIP (MILP), and D-Wave's
-Stride quantum hybrid solver. RCPSP is a canonical combinatorial optimization
+Stride hybrid solver. RCPSP is a canonical combinatorial optimization
 problem in the operations research and scheduling domains and is NP-hard in
 general.
 
@@ -161,7 +161,7 @@ input/
   cutting-plane machinery often finds better bounds than HiGHS within the same
   time limit on hard instances.
 
-- **Stride Quantum Hybrid** — a compact nonlinear model built with
+- **Stride Hybrid Solver** — a compact nonlinear model built with
   `dwave.optimization`. Start times and modes are integer decision variables;
   resource feasibility is enforced with a sweep-line (AccumulateZip) over sorted
   event times rather than per-timestep constraints. This dramatically reduces

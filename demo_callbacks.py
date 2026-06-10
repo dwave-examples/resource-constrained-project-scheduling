@@ -241,7 +241,7 @@ def update_button_visibility(
 _SOLVER_INDEX: dict[str, str] = {
     "HiGHS (MILP)": "highs",
     "SCIP (MILP)": "scip",
-    "Stride Quantum Hybrid": "stride",
+    "Stride Hybrid Solver": "stride",
 }
 
 
@@ -483,7 +483,7 @@ def run_stride(
         [str(SolverType.STRIDE.value)], float(time_limit), int(runs), input_path=selected_input
     )
     return RunStrideReturn(
-        stride_results=_solver_panel("Stride Quantum Hybrid", rows, selected_input),
+        stride_results=_solver_panel("Stride Hybrid Solver", rows, selected_input),
         stride_store={"run_click": run_click, "rows": rows},
         stride_tab_class=_solver_tab_class(rows),
     )

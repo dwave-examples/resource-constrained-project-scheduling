@@ -246,21 +246,21 @@ def build_input_graph(input_path: str) -> go.Figure:
                 customdata=[
                     [
                         mode_val,
-                        profile["mechanic_use"].get((job, mode_val), 0),
-                        profile["technician_use"].get((job, mode_val), 0),
+                        f"Mechanics: {int(profile['mechanic_use'].get((job, mode_val), 0))}<br>"
+                        if profile["mechanic_use"].get((job, mode_val), 0) > 0
+                        else "",
+                        f"Technicians: {int(profile['technician_use'].get((job, mode_val), 0))}<br>"
+                        if profile["technician_use"].get((job, mode_val), 0) > 0
+                        else "",
                         duration_by_job[job],
-                        start_by_job[job],
                     ]
                     for job in mode_jobs
                 ],
                 hovertemplate=(
                     "<b>%{y}</b><br>Start: %{base}<br>Duration: %{customdata[3]}<br>"
-                    "Mode: %{customdata[0]}<br>"
-                    "Mechanics: %{customdata[1]}<br>"
-                    "Technicians: %{customdata[2]}<br>"
-                    "Earliest start: %{customdata[4]}<extra></extra>"
+                    "%{customdata[1]}%{customdata[2]}<extra></extra>"
                 ),
-                name=f"{res_type.capitalize()} – Mode {mode_val}",
+                name=f"{mode_val} {res_type.capitalize()}{'s'[:mode_val^1]}",
                 legendgroup=res_type,
                 legendgrouptitle_text=res_type.capitalize() if mode_val == 1 else None,
                 showlegend=True,
@@ -317,7 +317,7 @@ def build_input_graph(input_path: str) -> go.Figure:
 
     fig.update_layout(
         template="plotly_white",
-        margin={"l": 20, "r": 20, "t": 30, "b": 90},
+        margin={"l": 20, "r": 180, "t": 30, "b": 90},
         paper_bgcolor="white",
         plot_bgcolor="white",
         showlegend=True,
@@ -601,21 +601,21 @@ def build_solution_graph(
                 customdata=[
                     [
                         mode_val,
-                        profile["mechanic_use"].get((job, mode_val), 0),
-                        profile["technician_use"].get((job, mode_val), 0),
+                        f"Mechanics: {int(profile['mechanic_use'].get((job, mode_val), 0))}<br>"
+                        if profile["mechanic_use"].get((job, mode_val), 0) > 0
+                        else "",
+                        f"Technicians: {int(profile['technician_use'].get((job, mode_val), 0))}<br>"
+                        if profile["technician_use"].get((job, mode_val), 0) > 0
+                        else "",
                         duration[job],
-                        asap_start.get(job, 0),
                     ]
                     for job in mode_jobs
                 ],
                 hovertemplate=(
                     "<b>%{y}</b><br>Start: %{base}<br>Duration: %{customdata[3]}<br>"
-                    "Mode: %{customdata[0]}<br>"
-                    "Mechanics: %{customdata[1]}<br>"
-                    "Technicians: %{customdata[2]}<br>"
-                    "Earliest start: %{customdata[4]}<extra></extra>"
+                    "%{customdata[1]}%{customdata[2]}<extra></extra>"
                 ),
-                name=f"{res_type.capitalize()} – Mode {mode_val}",
+                name=f"{mode_val} {res_type.capitalize()}{'s'[:mode_val^1]}",
                 legendgroup=res_type,
                 legendgrouptitle_text=res_type.capitalize() if mode_val == 1 else None,
                 showlegend=True,
@@ -676,7 +676,7 @@ def build_solution_graph(
     fig.update_layout(
         title=title,
         template="plotly_white",
-        margin={"l": 20, "r": 20, "t": 40, "b": 90},
+        margin={"l": 20, "r": 180, "t": 40, "b": 90},
         paper_bgcolor="white",
         plot_bgcolor="white",
         showlegend=True,
