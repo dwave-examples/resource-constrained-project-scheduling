@@ -321,7 +321,7 @@ def build_input_graph(input_path: str) -> go.Figure:
         paper_bgcolor="white",
         plot_bgcolor="white",
         showlegend=True,
-        legend={"orientation": "v", "x": 1.01, "y": 1},
+        legend={"orientation": "v", "x": 1, "y": 0.6},
         height=760,
     )
     fig.update_xaxes(title_text="Time", row=2, col=1)
@@ -339,7 +339,7 @@ def build_input_graph(input_path: str) -> go.Figure:
         xref="paper",
         yref="paper",
         x=1,
-        y=0.6,
+        y=0.8,
         showarrow=False,
         align="left",
         font={"size": 12, "color": "#666666"},
@@ -354,7 +354,7 @@ def build_input_graph(input_path: str) -> go.Figure:
         xref="paper",
         yref="paper",
         x=1,
-        y=0.3,
+        y=1,
         showarrow=False,
         align="left",
         font={"size": 13},
@@ -565,16 +565,7 @@ def build_solution_graph(
     r_m = math.ceil(max(mech_demand, default=0))
     r_t = math.ceil(max(tech_demand, default=0))
 
-    fig = make_subplots(
-        rows=2,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.14,
-        subplot_titles=(
-            "Solver Timeline",
-            "Resource Demand",
-        ),
-    )
+    fig = go.Figure()
 
     for (res_type, mode_val), color in _JOB_COLORS.items():
         mode_jobs = [
@@ -620,8 +611,6 @@ def build_solution_graph(
                 legendgrouptitle_text=res_type.capitalize() if mode_val == 1 else None,
                 showlegend=True,
             ),
-            row=1,
-            col=1,
         )
 
     fig.add_trace(
@@ -639,71 +628,23 @@ def build_solution_graph(
             hoverinfo="skip",
             showlegend=True,
         ),
-        row=1,
-        col=1,
-    )
-
-    x_axis = list(range(len(mech_demand)))
-
-    input_mech_peak, input_tech_peak = _input_demand_peaks(input_path)
-    demand_ymax = math.ceil(max(input_mech_peak, input_tech_peak))
-
-    fig.add_trace(
-        go.Scatter(
-            x=x_axis,
-            y=mech_demand,
-            mode="lines",
-            line={"color": _MECHANIC_LINE_COLOR, "width": 2},
-            name="Mechanics",
-            legendgroup="mechanic",
-        ),
-        row=2,
-        col=1,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=x_axis,
-            y=tech_demand,
-            mode="lines",
-            line={"color": _TECHNICIAN_LINE_COLOR, "width": 2},
-            name="Technicians",
-            legendgroup="technician",
-        ),
-        row=2,
-        col=1,
     )
 
     fig.update_layout(
-        title=title,
+        title=title + "<br><sup><i>Hover over a job to highlight its predecessors</i></sup>",
         template="plotly_white",
         margin={"l": 20, "r": 180, "t": 40, "b": 90},
         paper_bgcolor="white",
         plot_bgcolor="white",
         showlegend=True,
-        legend={"orientation": "v", "x": 1.01, "y": 1},
-        height=760,
+        legend={"orientation": "v", "x": 1, "y": 0.7},
+        height=500,
     )
-    fig.update_xaxes(title_text="Time", row=2, col=1)
-    fig.update_xaxes(showticklabels=True, row=1, col=1)
+    fig.update_xaxes(title_text="Time", showticklabels=True)
     fig.update_yaxes(
         title_text="Jobs",
-        row=1,
-        col=1,
         categoryorder="array",
         categoryarray=[f"Job {job}" for job in reversed(jobs_sorted)],
-    )
-    fig.update_yaxes(title_text="Resource Units", row=2, col=1, range=[0, demand_ymax])
-    fig.add_annotation(
-        text="<i>Hover over a job to highlight<br>its predecessors</i>",
-        xref="paper",
-        yref="paper",
-        x=1,
-        y=0.6,
-        showarrow=False,
-        align="left",
-        font={"size": 12, "color": "#666666"},
-        xanchor="left",
-        yanchor="bottom",
     )
     fig.add_annotation(
         text=(
@@ -713,7 +654,7 @@ def build_solution_graph(
         xref="paper",
         yref="paper",
         x=1,
-        y=0.3,
+        y=1,
         showarrow=False,
         align="left",
         font={"size": 13},

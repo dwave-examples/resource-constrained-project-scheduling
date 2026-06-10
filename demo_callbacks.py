@@ -268,7 +268,7 @@ def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
             input_path,
             best.get("starts", {}),
             best.get("modes", {}),
-            title=f"{label} Best Solution View",
+            title=f"{label} Best Schedule",
         )
         if has_solution
         else None
