@@ -209,6 +209,8 @@ def build_input_graph(input_path: str) -> go.Figure:
     hire_rates = profile.get("hire_rates", {"Mechaniker": 100.0, "Techniker": 51.0})
     r_m = math.ceil(max(mech_demand, default=0))
     r_t = math.ceil(max(tech_demand, default=0))
+    upper_bounds = profile.get("upper_bounds", {})
+    display_horizon = max(horizon, max(upper_bounds.values(), default=horizon))
 
     fig = make_subplots(
         rows=2,
@@ -219,6 +221,36 @@ def build_input_graph(input_path: str) -> go.Figure:
             "Timeline (Ignoring Resource Limits)",
             "Resource Demand",
         ),
+    )
+
+    _grey = "#DDDDDD"
+    fig.add_trace(
+        go.Bar(
+            x=[start_by_job[job] for job in jobs_sorted],
+            y=[f"Job {job}" for job in jobs_sorted],
+            base=0,
+            orientation="h",
+            marker={"color": _grey, "line": {"width": 0}},
+            hoverinfo="skip",
+            showlegend=False,
+            name="",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Bar(
+            x=[max(0, display_horizon - upper_bounds.get(job, display_horizon)) for job in jobs_sorted],
+            y=[f"Job {job}" for job in jobs_sorted],
+            base=[upper_bounds.get(job, display_horizon) for job in jobs_sorted],
+            orientation="h",
+            marker={"color": _grey, "line": {"width": 0}},
+            hoverinfo="skip",
+            showlegend=False,
+            name="",
+        ),
+        row=1,
+        col=1,
     )
 
     for (res_type, mode_val), color in _JOB_COLORS.items():
@@ -269,25 +301,6 @@ def build_input_graph(input_path: str) -> go.Figure:
             col=1,
         )
 
-    fig.add_trace(
-        go.Scatter(
-            x=[start_by_job[job] for job in jobs_sorted],
-            y=[f"Job {job}" for job in jobs_sorted],
-            mode="markers",
-            marker={
-                "symbol": "triangle-right",
-                "size": 10,
-                "color": "#444444",
-                "opacity": 0.7,
-            },
-            name="Earliest start",
-            hoverinfo="skip",
-            showlegend=True,
-        ),
-        row=1,
-        col=1,
-    )
-
     x_axis = list(range(len(mech_demand)))
 
     fig.add_trace(
@@ -317,6 +330,7 @@ def build_input_graph(input_path: str) -> go.Figure:
 
     fig.update_layout(
         template="plotly_white",
+        barmode="overlay",
         margin={"l": 20, "r": 180, "t": 30, "b": 90},
         paper_bgcolor="white",
         plot_bgcolor="white",
@@ -564,8 +578,36 @@ def build_solution_graph(
     hire_rates = profile.get("hire_rates", {"Mechaniker": 100.0, "Techniker": 51.0})
     r_m = math.ceil(max(mech_demand, default=0))
     r_t = math.ceil(max(tech_demand, default=0))
+    upper_bounds = profile.get("upper_bounds", {})
+    display_horizon = max(horizon, max(upper_bounds.values(), default=horizon))
 
     fig = go.Figure()
+
+    _grey = "#DDDDDD"
+    fig.add_trace(
+        go.Bar(
+            x=[asap_start.get(job, 0) for job in jobs_sorted],
+            y=[f"Job {job}" for job in jobs_sorted],
+            base=0,
+            orientation="h",
+            marker={"color": _grey, "line": {"width": 0}},
+            hoverinfo="skip",
+            showlegend=False,
+            name="",
+        ),
+    )
+    fig.add_trace(
+        go.Bar(
+            x=[max(0, display_horizon - upper_bounds.get(job, display_horizon)) for job in jobs_sorted],
+            y=[f"Job {job}" for job in jobs_sorted],
+            base=[upper_bounds.get(job, display_horizon) for job in jobs_sorted],
+            orientation="h",
+            marker={"color": _grey, "line": {"width": 0}},
+            hoverinfo="skip",
+            showlegend=False,
+            name="",
+        ),
+    )
 
     for (res_type, mode_val), color in _JOB_COLORS.items():
         mode_jobs = [
@@ -613,26 +655,10 @@ def build_solution_graph(
             ),
         )
 
-    fig.add_trace(
-        go.Scatter(
-            x=[asap_start.get(job, 0) for job in jobs_sorted],
-            y=[f"Job {job}" for job in jobs_sorted],
-            mode="markers",
-            marker={
-                "symbol": "triangle-right",
-                "size": 10,
-                "color": "#444444",
-                "opacity": 0.7,
-            },
-            name="Earliest start",
-            hoverinfo="skip",
-            showlegend=True,
-        ),
-    )
-
     fig.update_layout(
         title=title + "<br><sup><i>Hover over a job to highlight its predecessors</i></sup>",
         template="plotly_white",
+        barmode="overlay",
         margin={"l": 20, "r": 180, "t": 40, "b": 90},
         paper_bgcolor="white",
         plot_bgcolor="white",
