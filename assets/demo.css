@@ -34,8 +34,11 @@ custom CSS can be added below.
     align-items: center;
     height: 100%;
     width: 100%;
-    max-width: 60rem;
     margin: auto;
+}
+
+.input {
+    max-width: 60rem;
 }
 
 #tabs-panel-results-tab .results {
