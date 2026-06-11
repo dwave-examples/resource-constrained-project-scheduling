@@ -218,7 +218,7 @@ def build_input_graph(input_path: str) -> go.Figure:
         shared_xaxes=True,
         vertical_spacing=0.14,
         subplot_titles=(
-            "Timeline (Ignoring Resource Limits)",
+            "Greedy Schedule (Earliest Start)",
             "Resource Demand",
         ),
     )
