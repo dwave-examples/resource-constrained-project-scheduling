@@ -335,7 +335,7 @@ def build_input_graph(input_path: str) -> go.Figure:
         paper_bgcolor="white",
         plot_bgcolor="white",
         showlegend=True,
-        legend={"orientation": "v", "x": 1, "y": 0.6},
+        legend={"orientation": "v", "x": 1, "y": 0},
         height=760,
     )
     fig.update_xaxes(title_text="Time", row=2, col=1)
@@ -353,7 +353,7 @@ def build_input_graph(input_path: str) -> go.Figure:
         xref="paper",
         yref="paper",
         x=1,
-        y=0.8,
+        y=0.7,
         showarrow=False,
         align="left",
         font={"size": 12, "color": "#666666"},
@@ -663,7 +663,7 @@ def build_solution_graph(
         paper_bgcolor="white",
         plot_bgcolor="white",
         showlegend=True,
-        legend={"orientation": "v", "x": 1, "y": 0.7},
+        legend={"orientation": "v", "x": 1, "y": 0},
         height=500,
     )
     fig.update_xaxes(title_text="Time", showticklabels=True)
