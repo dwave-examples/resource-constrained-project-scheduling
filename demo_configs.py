@@ -48,5 +48,5 @@ SOLVER_TIME = {
     "min": 5,
     "max": 300,
     "step": 5,
-    "value": 10,
+    "value": 15,
 }
