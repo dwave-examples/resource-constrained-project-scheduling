@@ -145,7 +145,8 @@ src/
   stride.py            D-Wave Stride nonlinear model and solver wrapper
   plot.py              Plotly figure builders (input view, solution view, comparison)
   demo_enums.py        SolverType enum
-  demo_runner.py       Parallel run orchestration and result summarisation
+  demo_runner.py       Parallel run orchestration and result summarization
+  utils.py             MPS file parser and MILP variable-name decoder shared across solvers and plot builders
 input/
   30n20b8.mps          Benchmark RCPSP instance in MPS format
 ```

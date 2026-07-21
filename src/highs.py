@@ -41,19 +41,15 @@ def _extract_assignment_highs(highs_model: Any) -> tuple[dict[int, int], dict[in
     values = []
 
     try:
-        lp = highs_model.getLp()
-        names = list(lp.col_names_)
-    except Exception:
+        names = list(highs_model.getLp().col_names_)
+    except AttributeError:
         names = []
 
     try:
         values = list(highs_model.allVariableValues())
-    except Exception:
-        try:
-            sol = highs_model.getSolution()
-            values = list(getattr(sol, "col_value", []))
-        except Exception:
-            values = []
+    except AttributeError:
+        sol = highs_model.getSolution()
+        values = list(getattr(sol, "col_value", []))
 
     if not names or not values:
         return {}, {}
@@ -78,14 +74,6 @@ def solve_highs(time_limit: float, input_path: str) -> dict[str, Any]:
         - ``"starts"``: start time keyed by job ID (empty if infeasible).
         - ``"modes"``: execution mode keyed by job ID (empty if infeasible).
     """
-    if hs is None:
-        return {
-            "solver": "HiGHS (MILP)",
-            "status": "Unavailable: highspy not installed",
-            "energy": None,
-            "ok": False,
-        }
-
     try:
         h = hs.Highs()
         h.readModel(input_path)
