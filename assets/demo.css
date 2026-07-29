@@ -33,12 +33,57 @@ custom CSS can be added below.
     justify-content: center;
     align-items: center;
     height: 100%;
+    width: 100%;
+    margin: auto;
 }
 
-.problem-details-table {
-    width: 15.5rem;
+.input {
+    max-width: 60rem;
 }
 
-  /****************************/
- /*** CUSTOM CSS GOES HERE ***/
-/****************************/
+#tabs-panel-results-tab .results {
+    max-width: none;
+}
+
+.tab-fail:where(:not([data-active])),
+.mantine-Tabs-tab:hover:where(:not([data-active])).tab-fail {
+    border-top-color: var(--red-light);
+    border-style: solid;
+}
+
+.tab-success:where(:not([data-active])),
+.mantine-Tabs-tab:hover:where(:not([data-active])).tab-success {
+    border-top-color: var(--teal-darker);
+    border-style: solid;
+}
+
+#input,
+#results,
+#highs-results,
+#scip-results,
+#stride-results {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.placeholder-text {
+    color: var(--grey-medium);
+    font-style: italic;
+    padding: 1rem 0;
+    font-weight: 500;
+}
+
+.row-highlight-best {
+    background-color: rgba(23, 190, 187, 0.42);
+}
+
+.row-highlight-fail {
+    background-color: rgba(245, 118, 119, 0.36);
+}
+
+.dash-graph {
+    width: 100%;
+}

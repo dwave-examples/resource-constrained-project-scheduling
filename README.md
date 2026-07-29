@@ -1,32 +1,17 @@
-### Interested in contributing a code example?
+# Resource-Constrained Project Scheduling
 
-Please take a look at our [contribution guidelines](CONTRIBUTING.md) before getting started.
-Thank you!
+This demo solves a **Resource-Constrained Project Scheduling Problem (RCPSP)** and
+compares three solvers side-by-side: HiGHS (MILP), SCIP (MILP), and D-Wave's
+Stride hybrid solver. RCPSP is a canonical combinatorial optimization
+problem in the operations research and scheduling domains and is NP-hard in
+general.
 
-The Dash template is intended for demos that would benefit from a user interface. This user
-interface could include settings to run and customize the problem, an interactive graphical element,
-or tables/charts to compare different solutions. This template is also useful for demos that are
-intended for a general audience, as it is more approachable for those without a technical background.
-
-<!-- Before submitting your code, please delete everything above and including this comment. -->
-<!-- The following is a README template for your new demo. -->
-
-# Demo Name
-
-Describe your demo and specify what it is demonstrating. Consider the
-following questions:
-
-* Is it a canonical problem or a real-world application?
-* Does it belong to a particular domain such as material simulation or logistics?
-* What level of Ocean proficiency does it target: beginner, advanced?
-
-A clear description allows us to properly categorize your demo.
-
-Please include a screenshot of your demo below.
+The included instance (`30n20b8.mps`) has 30 jobs, 2 renewable resource types
+(mechanics and technicians), and up to 3 execution modes per job. The known
+optimal objective value is **302**.
 
 ![Demo Example](static/demo.png "Image of demo interface")
-
-<!-- Below is boilerplate instructions to be included, as is, in the final demo. -->
+![Demo Solution Example](static/demo2.png "Image of demo interface with solution")
 
 ## Installation
 You can run this example without installation in cloud-based IDEs that support the
@@ -66,57 +51,138 @@ Configuration options can be found in the [demo_configs.py](demo_configs.py) fil
 with the `--debug` command-line argument for live reloads and easier debugging:
 `python app.py --debug`
 
-<!-- End of boilerplate. -->
-
 ## Problem Description
-Give an overview of the problem you are solving in this demo.
 
-**Objectives**: define the goal this example attempts to accomplish by minimizing or maximizing
-certain aspects of the problem. For example, a production-line optimization might attempt to
-minimize the time to produce all of the products.
+A set of jobs must be scheduled on a project timeline. Each job must be
+executed in exactly one mode, where each mode specifies a duration and a
+resource consumption rate. Faster modes consume more resources per time unit.
+Jobs have precedence constraints: a job cannot start until all of its
+predecessors have finished. Two shared resource pools (mechanics and
+technicians) are consumed while jobs are active, and the project manager must
+decide how large each pool to hire. Hiring is paid for by the whole project, so
+the goal is to minimize total workforce cost while still satisfying every
+precedence and resource constraint.
 
-**Constraints**: aspects of the problem, with limited or no flexibility, that must be satisfied for
-solutions to be considered feasible. For example, a production-line optimization might have a
-limitation that Machine A can only bend 10 parts per hour.
+**Objective**: Minimize the total cost of hired mechanics and technicians:
+
+**100 · R_M + 51 · R_T**
+
+**Constraints**:
+- Each job is executed in exactly one mode.
+- A job's start time respects all predecessor finish times (precedence).
+- At every point in time, the active resource consumption of all running jobs
+  cannot exceed the hired pool size for each resource type.
+- The hired pool sizes are bounded by market availability (40 mechanics,
+  30 technicians).
 
 ## Model Overview
-The clearer your model is presented here, the more useful it will be to others. For a strong example
-of this section, see [here](https://github.com/dwave-examples/3d-bin-packing#model-overview).
 
 ### Parameters
-List and define the parameters used in your model.
+
+| Symbol | Description |
+|--------|-------------|
+| *J* | Set of jobs (30 in the provided instance) |
+| *M_j* | Set of execution modes for job *j* (up to 3) |
+| *d_jm* | Duration of job *j* in mode *m* (time units) |
+| *r^M_jm* | Mechanic units consumed per time unit by job *j* in mode *m* |
+| *r^T_jm* | Technician units consumed per time unit by job *j* in mode *m* |
+| prec | Set of precedence pairs *(j₁, j₂)*: *j₁* must finish before *j₂* starts |
+| *R̄_M* = 40 | Maximum mechanics available for hire |
+| *R̄_T* = 30 | Maximum technicians available for hire |
 
 ### Variables
-List and define (including type: e.g., "binary" or "integer") the variables solved for in your model.
 
-### Expressions
-List and define any combinations of variables used for easier representations of the models.
+| Symbol | Type | Description |
+|--------|------|-------------|
+| *x_jmt* ∈ {0,1} | Binary (MILP) | 1 if job *j* starts at time *t* in mode *m* |
+| *S_j* ∈ ℤ≥0 | Integer | Start time of job *j* |
+| *m_j* ∈ {1,2,3} | Integer | Execution mode of job *j* |
+| *R_M* ∈ {0,...,40} | Integer | Number of mechanics hired |
+| *R_T* ∈ {0,...,30} | Integer | Number of technicians hired |
+
+The MILP formulations (HiGHS and SCIP) operate on the time-indexed binary
+variables *x_jmt*. The Stride nonlinear formulation uses *S_j* and *m_j*
+directly as integer decision variables, producing a much more compact model.
 
 ### Objective
-Mathematical formulation of the objective described in the previous section using the listed
-parameters, variables, etc.
+
+```
+min  100 · R_M + 51 · R_T
+```
 
 ### Constraints
-Mathematical formulation of the constraints described in the previous section using the listed
-parameters, variables, etc.
+
+**Job execution** (each job runs in exactly one mode at exactly one start time):
+
+```
+∑_(m ∈ M_j) ∑_t  x_jmt = 1   for all j ∈ J
+```
+
+**Precedence** (job *j₂* cannot start until *j₁* finishes):
+
+```
+S_j₁ + d_(j₁, m_j₁)  ≤  S_j₂   for all (j₁, j₂) ∈ prec
+```
+
+**Resource capacity** (active consumption never exceeds the hired pool):
+
+```
+∑_(j ∈ J) r^M_jm_j · 1[S_j ≤ t < S_j + d_(j,m_j)]  ≤  R_M   for all t
+
+∑_(j ∈ J) r^T_jm_j · 1[S_j ≤ t < S_j + d_(j,m_j)]  ≤  R_T   for all t
+```
 
 ## Code Overview
 
-A general overview of how the code works.
+```
+app.py                  Dash application entry point
+demo_callbacks.py       All Dash callback functions (solver dispatch, results rendering)
+demo_configs.py         UI configuration constants and known optimal values
+demo_interface.py       Dash layout builders and reusable component functions
+src/
+  highs.py             HiGHS MILP solver wrapper
+  scip.py              SCIP MILP solver wrapper
+  stride.py            D-Wave Stride nonlinear model and solver wrapper
+  plot.py              Plotly figure builders (input view, solution view, comparison)
+  demo_enums.py        SolverType enum
+  demo_runner.py       Parallel run orchestration and result summarization
+  utils.py             MPS file parser and MILP variable-name decoder shared across solvers and plot builders
+input/
+  30n20b8.mps          Benchmark RCPSP instance in MPS format
+```
 
-Include any notable parts of the code implementation:
+**Three solver formulations** are compared on the same instance:
 
-* Talk about unusual or potentially difficult parts of the code
-* Explain a code decision
-* Explain how parameters were tuned
+- **HiGHS (MILP)** — reads the MPS file directly using `highspy`. Uses the
+  classical time-indexed binary formulation where *x_jmt* is a binary variable
+  for every (job, mode, start-time) triple. Scales poorly with horizon length but
+  is a well-understood baseline.
 
-Note: there is no need to repeat everything that is already well-documented in
-the code.
+- **SCIP (MILP)** — same MPS file via `PySCIPOpt`. SCIP's branch-and-bound and
+  cutting-plane machinery often finds better bounds than HiGHS within the same
+  time limit on hard instances.
+
+- **Stride Hybrid Solver** — a compact nonlinear model built with
+  `dwave.optimization`. Start times and modes are integer decision variables;
+  resource feasibility is enforced with a sweep-line (AccumulateZip) over sorted
+  event times rather than per-timestep constraints. This dramatically reduces
+  model size and is submitted to `LeapHybridNLSampler`.
+
+**Input visualization** (`plot.py / build_input_graph`) displays an ASAP
+(As-Soon-As-Possible) schedule computed by a topological-order forward pass on
+the precedence graph, ignoring resource limits. This shows the theoretical
+lower bound on makespan and the resource demand profile before any
+resource-feasibility adjustments are made.
+
+**Solver comparison** runs each selected solver the requested number of times
+and records the objective value, feasibility flag, and best schedule per run.
+Results populate the per-solver tabs (Gantt + resource demand) and a Results
+summary tab with a cross-solver demand comparison and an objective-value table.
 
 ## References
 
-A. Person (YEAR), "An Article Title that Helped Formulate the Problem".
-[Link Title](https://example.com/)
+The instance `30n20b8.mps` is from the MIPLIB 2017 benchmark collection:
+[miplib.zib.de/instance_details_30n20b8.html](https://miplib.zib.de/instance_details_30n20b8.html)
 
 ## License
 

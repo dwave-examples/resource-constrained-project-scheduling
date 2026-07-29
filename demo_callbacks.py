@@ -1,4 +1,4 @@
-# Copyright 2024 D-Wave
+# Copyright 2026 D-Wave
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,12 +14,28 @@
 
 from __future__ import annotations
 
-import dash
-from dash import MATCH
-from dash.dependencies import Input, Output, State
+import math
+from typing import NamedTuple
 
-from demo_interface import generate_table
+import dash
+import plotly.graph_objects as go
+from dash import MATCH, Patch, ctx, html
+from dash.dependencies import Input, Output, State
+from dash.exceptions import PreventUpdate
+
+from demo_configs import KNOWN_OPTIMA
+from demo_interface import (
+    comparison_panel,
+    comparison_summary_table,
+    results_layout,
+    solver_not_selected_panel,
+    solver_solution_panel,
+    waiting_panel,
+)
 from src.demo_enums import SolverType
+from src.demo_runner import compare_formulations, summarize_runs
+from src.plot import _compute_demand, build_comparison_graph, build_input_graph, build_solution_graph
+from src.utils import parse_mps_structure
 
 
 @dash.callback(
@@ -54,96 +70,694 @@ def toggle_left_column(collapse_trigger: int, to_collapse_class: str) -> tuple[s
 
 
 @dash.callback(
-    Output("input", "children"),
+    Output("input-graph", "figure"),
     inputs=[
-        Input("slider", "value"),
+        Input("input-file-select", "value"),
     ],
 )
-def render_initial_state(slider_value: int) -> str:
-    """Runs on load and any time the value of the slider is updated.
-        Add `prevent_initial_call=True` to skip on load runs.
+def render_initial_state(input_file: str) -> go.Figure:
+    """Build the input-tab figure on load and whenever the selected file changes.
 
     Args:
-        slider_value: The value of the slider.
+        input_file: Path to the selected MPS input file.
 
     Returns:
-        The content of the input tab.
+        A Plotly figure showing the ASAP schedule and resource demand profile
+        for the selected problem instance.
     """
-    return f"Put demo visuals here. The current slider value is {slider_value}."
+    selected_input = input_file or ""
+    return build_input_graph(selected_input)
+
+
+# ---------------------------------------------------------------------------
+# 1. Run/cancel state callback — mirrors update_tab_loading_state in the example.
+#    Sets tab labels/disabled, shows/hides buttons, and sets the running-* flags
+#    that trigger the three independent background solver callbacks below.
+# ---------------------------------------------------------------------------
+
+
+class UpdateRunStateReturn(NamedTuple):
+    """Return type for update_run_state."""
+
+    results_tab_label: str = "Results"
+    results_tab_disabled: bool = False
+    running_highs: bool = False
+    highs_tab_label: str = "HiGHS"
+    highs_tab_disabled: bool = False
+    highs_tab_class: str = ""
+    running_scip: bool = False
+    scip_tab_label: str = "SCIP"
+    scip_tab_disabled: bool = False
+    scip_tab_class: str = ""
+    running_stride: bool = False
+    stride_tab_label: str = "Stride"
+    stride_tab_disabled: bool = False
+    stride_tab_class: str = ""
+    run_button_style: dict = {}
+    cancel_button_style: dict = {"display": "none"}
+    tabs_value: str = dash.no_update
 
 
 @dash.callback(
-    # The Outputs below must align with the return values of the function.
-    Output("results", "children"),
-    Output("problem-details", "children"),
-    background=True,
+    Output("results-tab", "children"),
+    Output("results-tab", "disabled"),
+    Output("running-highs", "data"),
+    Output("highs-tab", "children"),
+    Output("highs-tab", "disabled"),
+    Output("highs-tab", "className"),
+    Output("running-scip", "data"),
+    Output("scip-tab", "children"),
+    Output("scip-tab", "disabled"),
+    Output("scip-tab", "className"),
+    Output("running-stride", "data"),
+    Output("stride-tab", "children"),
+    Output("stride-tab", "disabled"),
+    Output("stride-tab", "className"),
+    Output("run-button", "style"),
+    Output("cancel-button", "style"),
+    Output("tabs", "value"),
     inputs=[
-        # The first string in the Input/State elements below must match an id in demo_interface.py
-        # Remove or alter the following id's to match any changes made to demo_interface.py
         Input("run-button", "n_clicks"),
-        State("solver-type-select", "value"),
-        State("solver-time-limit", "value"),
-        State("slider", "value"),
-        State("dropdown", "value"),
-        State("checklist", "value"),
-        State("radio", "value"),
+        Input("cancel-button", "n_clicks"),
+        State("solver-selection", "value"),
     ],
-    running=[
-        (Output("cancel-button", "style"), {}, {"display": "none"}),  # Show/hide cancel button.
-        (Output("run-button", "style"), {"display": "none"}, {}),  # Hides run button while running.
-        (Output("results-tab", "disabled"), True, False),  # Disables results tab while running.
-        (Output("results-tab", "children"), "Loading...", "Results"),
-        (Output("tabs", "value"), "input-tab", "input-tab"),  # Switch to input tab while running.
-        (Output("run-in-progress", "data"), True, False),  # Can block certain callbacks.
-    ],
-    cancel=[Input("cancel-button", "n_clicks")],
     prevent_initial_call=True,
 )
-def run_optimization(
-    # The parameters below must match the `Input` and `State` variables found
-    # in the `inputs` list above.
+def update_run_state(
     run_click: int,
-    solver_type: str,
-    time_limit: float,
-    slider_value: int,
-    dropdown_value: int,
-    checklist_value: list,
-    radio_value: int,
-) -> tuple[str, list]:
-    """Runs the optimization and updates UI accordingly.
-
-    This is the main function which is called when the ``Run Optimization`` button is clicked.
-    This function takes in all form values and runs the optimization, updates the run/cancel
-    buttons, deactivates (and reactivates) the results tab, and updates all relevant HTML
-    components.
+    cancel_click: int,
+    solver_selection: list[str],
+) -> UpdateRunStateReturn:
+    """Update tab labels, disabled state, and running flags on run/cancel.
 
     Args:
-        run_click: The (total) number of times the run button has been clicked.
-        solver_type: The solver to use for the optimization run defined by SolverType in demo_enums.py.
-        time_limit: The solver time limit.
-        slider_value: The value of the slider.
-        dropdown_value: The value of the dropdown.
-        checklist_value: A list of the values of the checklist.
-        radio_value: The value of the radio.
+        run_click: Number of times run button has been clicked.
+        cancel_click: Number of times cancel button has been clicked.
+        solver_selection: Currently selected solver values.
+
+    Returns:
+        UpdateRunStateReturn controlling tab state, button visibility, and
+        running-* flags for each solver.
+    """
+    selection = solver_selection or []
+    highs_selected = str(SolverType.HIGHS.value) in selection
+    scip_selected = str(SolverType.SCIP.value) in selection
+    stride_selected = str(SolverType.STRIDE.value) in selection
+
+    if ctx.triggered_id == "run-button" and run_click:
+        any_selected = highs_selected or scip_selected or stride_selected
+        return UpdateRunStateReturn(
+            results_tab_label="Loading..." if any_selected else "Results",
+            results_tab_disabled=True,
+            running_highs=highs_selected,
+            highs_tab_label="Loading..." if highs_selected else "HiGHS",
+            highs_tab_disabled=True,
+            highs_tab_class="",
+            running_scip=scip_selected,
+            scip_tab_label="Loading..." if scip_selected else "SCIP",
+            scip_tab_disabled=True,
+            scip_tab_class="",
+            running_stride=stride_selected,
+            stride_tab_label="Loading..." if stride_selected else "Stride",
+            stride_tab_disabled=True,
+            stride_tab_class="",
+            run_button_style={"display": "none"},
+            cancel_button_style={},
+            tabs_value="input-tab",
+        )
+
+    if ctx.triggered_id == "cancel-button" and cancel_click:
+        return UpdateRunStateReturn()
+
+    raise PreventUpdate
+
+
+# ---------------------------------------------------------------------------
+# 2. Button-visibility watchdog — restores run/cancel when all solvers finish.
+#    Mirrors update_button_visibility in the example.
+# ---------------------------------------------------------------------------
+
+
+@dash.callback(
+    Output("run-button", "style", allow_duplicate=True),
+    Output("cancel-button", "style", allow_duplicate=True),
+    Output("run-in-progress", "data"),
+    inputs=[
+        Input("running-highs", "data"),
+        Input("running-scip", "data"),
+        Input("running-stride", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def update_button_visibility(
+    running_highs: bool,
+    running_scip: bool,
+    running_stride: bool,
+) -> tuple[dict, dict, bool]:
+    """Restore the run button only once every running solver has finished.
+
+    Args:
+        running_highs: Whether the HiGHS callback is still running.
+        running_scip: Whether the SCIP callback is still running.
+        running_stride: Whether the Stride callback is still running.
 
     Returns:
         A tuple containing:
 
-        - str: The results to display in the results tab.
-        - list: List of the table rows for the problem details table.
+        - dict: Run button style.
+        - dict: Cancel button style.
+        - bool: Whether any run is in progress.
     """
-
-    solver_type = SolverType(int(solver_type))
-
-
-    ###########################
-    ### YOUR CODE GOES HERE ###
-    ###########################
+    if running_highs or running_scip or running_stride:
+        return {"display": "none"}, {}, True
+    return {}, {"display": "none"}, False
 
 
-    # Generates the problem details table on the results page.
-    problem_details_table = generate_table(
-        {"Solver": [solver_type.label], "Time Limit": [time_limit]}
+# ---------------------------------------------------------------------------
+# Helper shared by the three solver background callbacks.
+# ---------------------------------------------------------------------------
+
+
+_SOLVER_INDEX: dict[str, str] = {
+    "HiGHS (MILP)": "highs",
+    "SCIP (MILP)": "scip",
+    "Stride Hybrid Solver": "stride",
+}
+
+
+def _solver_panel(label: str, rows: list[dict], input_path: str) -> html.Div:
+    """Build the content for a single solver's results tab.
+
+    Args:
+        label: Human-readable solver name.
+        rows: Run-level result rows for this solver.
+        input_path: Path to the input MPS file.
+
+    Returns:
+        A Div containing the solution graph and run details table.
+    """
+    best = min(
+        rows,
+        key=lambda row: (
+            row["energy"] if isinstance(row.get("energy"), (int, float)) else float("inf")
+        ),
+    )
+    has_solution = bool(best.get("starts")) and bool(best.get("modes"))
+    figure = (
+        build_solution_graph(
+            input_path,
+            best.get("starts", {}),
+            best.get("modes", {}),
+            title=f"{label} Best Schedule",
+        )
+        if has_solution
+        else None
+    )
+    return solver_solution_panel(has_solution, figure, _SOLVER_INDEX.get(label, label.lower()))
+
+
+def _solver_tab_class(rows: list[dict]) -> str:
+    """Return the CSS class for a solver tab based on run success.
+
+    Args:
+        rows: Run-level result rows for the solver.
+
+    Returns:
+        ``"tab-success"`` if any row has ``ok=True``, otherwise ``"tab-fail"``.
+    """
+    return "tab-success" if any(row.get("ok") for row in rows) else "tab-fail"
+
+
+# ---------------------------------------------------------------------------
+# 3–5. One background callback per solver — all triggered by the same run
+#      button click and all execute concurrently.
+# ---------------------------------------------------------------------------
+
+
+class RunHiGHSReturn(NamedTuple):
+    """Return type for run_highs."""
+
+    highs_results: html.Div = dash.no_update
+    highs_store: dict = dash.no_update
+    highs_tab_label: str = "HiGHS"
+    highs_tab_disabled: bool = False
+    running_highs: bool = False
+    highs_tab_class: str = dash.no_update
+
+
+@dash.callback(
+    Output("highs-results", "children"),
+    Output("highs-store", "data"),
+    Output("highs-tab", "children", allow_duplicate=True),
+    Output("highs-tab", "disabled", allow_duplicate=True),
+    Output("running-highs", "data", allow_duplicate=True),
+    Output("highs-tab", "className", allow_duplicate=True),
+    background=True,
+    inputs=[
+        Input("run-button", "n_clicks"),
+        State("solver-selection", "value"),
+        State("solver-time-limit", "value"),
+        State("runs", "value"),
+        State("input-file-select", "value"),
+    ],
+    cancel=[Input("cancel-button", "n_clicks")],
+    prevent_initial_call=True,
+)
+def run_highs(
+    run_click: int,
+    solver_selection: list[str],
+    time_limit: float,
+    runs: int,
+    input_file: str,
+) -> RunHiGHSReturn:
+    """Run HiGHS independently in the background.
+
+    Args:
+        run_click: Number of times run button has been clicked.
+        solver_selection: Currently selected solver values.
+        time_limit: Solver time limit in seconds.
+        runs: Number of repeated runs.
+        input_file: Path to the selected input file.
+
+    Returns:
+        RunHiGHSReturn with updated tab content, store data, and running flag.
+    """
+    if str(SolverType.HIGHS.value) not in (solver_selection or []):
+        return RunHiGHSReturn(
+            highs_results=solver_not_selected_panel("HiGHS"),
+            highs_store={"run_click": run_click, "rows": []},
+        )
+
+    selected_input = input_file or ""
+    rows = compare_formulations(
+        [str(SolverType.HIGHS.value)], float(time_limit), int(runs), input_path=selected_input
+    )
+    return RunHiGHSReturn(
+        highs_results=_solver_panel("HiGHS (MILP)", rows, selected_input),
+        highs_store={"run_click": run_click, "rows": rows},
+        highs_tab_class=_solver_tab_class(rows),
     )
 
-    return "Put demo results here.", problem_details_table
+
+class RunSCIPReturn(NamedTuple):
+    """Return type for run_scip."""
+
+    scip_results: html.Div = dash.no_update
+    scip_store: dict = dash.no_update
+    scip_tab_label: str = "SCIP"
+    scip_tab_disabled: bool = False
+    running_scip: bool = False
+    scip_tab_class: str = dash.no_update
+
+
+@dash.callback(
+    Output("scip-results", "children"),
+    Output("scip-store", "data"),
+    Output("scip-tab", "children", allow_duplicate=True),
+    Output("scip-tab", "disabled", allow_duplicate=True),
+    Output("running-scip", "data", allow_duplicate=True),
+    Output("scip-tab", "className", allow_duplicate=True),
+    background=True,
+    inputs=[
+        Input("run-button", "n_clicks"),
+        State("solver-selection", "value"),
+        State("solver-time-limit", "value"),
+        State("runs", "value"),
+        State("input-file-select", "value"),
+    ],
+    cancel=[Input("cancel-button", "n_clicks")],
+    prevent_initial_call=True,
+)
+def run_scip(
+    run_click: int,
+    solver_selection: list[str],
+    time_limit: float,
+    runs: int,
+    input_file: str,
+) -> RunSCIPReturn:
+    """Run SCIP independently in the background.
+
+    Args:
+        run_click: Number of times run button has been clicked.
+        solver_selection: Currently selected solver values.
+        time_limit: Solver time limit in seconds.
+        runs: Number of repeated runs.
+        input_file: Path to the selected input file.
+
+    Returns:
+        RunSCIPReturn with updated tab content, store data, and running flag.
+    """
+    if str(SolverType.SCIP.value) not in (solver_selection or []):
+        return RunSCIPReturn(
+            scip_results=solver_not_selected_panel("SCIP"),
+            scip_store={"run_click": run_click, "rows": []},
+        )
+
+    selected_input = input_file or ""
+    rows = compare_formulations(
+        [str(SolverType.SCIP.value)], float(time_limit), int(runs), input_path=selected_input
+    )
+    return RunSCIPReturn(
+        scip_results=_solver_panel("SCIP (MILP)", rows, selected_input),
+        scip_store={"run_click": run_click, "rows": rows},
+        scip_tab_class=_solver_tab_class(rows),
+    )
+
+
+class RunStrideReturn(NamedTuple):
+    """Return type for run_stride."""
+
+    stride_results: html.Div = dash.no_update
+    stride_store: dict = dash.no_update
+    stride_tab_label: str = "Stride"
+    stride_tab_disabled: bool = False
+    running_stride: bool = False
+    stride_tab_class: str = dash.no_update
+
+
+@dash.callback(
+    Output("stride-results", "children"),
+    Output("stride-store", "data"),
+    Output("stride-tab", "children", allow_duplicate=True),
+    Output("stride-tab", "disabled", allow_duplicate=True),
+    Output("running-stride", "data", allow_duplicate=True),
+    Output("stride-tab", "className", allow_duplicate=True),
+    background=True,
+    inputs=[
+        Input("run-button", "n_clicks"),
+        State("solver-selection", "value"),
+        State("solver-time-limit", "value"),
+        State("runs", "value"),
+        State("input-file-select", "value"),
+    ],
+    cancel=[Input("cancel-button", "n_clicks")],
+    prevent_initial_call=True,
+)
+def run_stride(
+    run_click: int,
+    solver_selection: list[str],
+    time_limit: float,
+    runs: int,
+    input_file: str,
+) -> RunStrideReturn:
+    """Run Stride independently in the background.
+
+    Args:
+        run_click: Number of times run button has been clicked.
+        solver_selection: Currently selected solver values.
+        time_limit: Solver time limit in seconds.
+        runs: Number of repeated runs.
+        input_file: Path to the selected input file.
+
+    Returns:
+        RunStrideReturn with updated tab content, store data, and running flag.
+    """
+    if str(SolverType.STRIDE.value) not in (solver_selection or []):
+        return RunStrideReturn(
+            stride_results=solver_not_selected_panel("Stride"),
+            stride_store={"run_click": run_click, "rows": []},
+        )
+
+    selected_input = input_file or ""
+    rows = compare_formulations(
+        [str(SolverType.STRIDE.value)], float(time_limit), int(runs), input_path=selected_input
+    )
+    return RunStrideReturn(
+        stride_results=_solver_panel("Stride Hybrid Solver", rows, selected_input),
+        stride_store={"run_click": run_click, "rows": rows},
+        stride_tab_class=_solver_tab_class(rows),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 6. Aggregate summary — fires each time a solver store updates, building the
+#    Results tab from whichever solvers have completed so far.
+# ---------------------------------------------------------------------------
+
+
+@dash.callback(
+    Output("results", "children"),
+    Output("results-tab", "disabled", allow_duplicate=True),
+    Output("results-tab", "children", allow_duplicate=True),
+    inputs=[
+        Input("highs-store", "data"),
+        Input("scip-store", "data"),
+        Input("stride-store", "data"),
+        State("run-button", "n_clicks"),
+        State("input-file-select", "value"),
+    ],
+    prevent_initial_call=True,
+)
+def render_aggregate_results(
+    highs_store: dict,
+    scip_store: dict,
+    stride_store: dict,
+    run_click: int,
+    input_file: str,
+) -> tuple[html.Div, bool, str]:
+    """Build the Results summary tab from completed solver stores.
+
+    Fires each time any solver store updates, so the summary grows as
+    solvers finish in parallel.
+
+    Args:
+        highs_store: Latest data stored by the HiGHS callback.
+        scip_store: Latest data stored by the SCIP callback.
+        stride_store: Latest data stored by the Stride callback.
+        run_click: Number of times the run button has been clicked.
+        input_file: Path to the selected input file.
+
+    Returns:
+        A tuple containing:
+
+        - html.Div: Summary and run-detail tables for all finished solvers.
+        - bool: Whether the Results tab should remain disabled.
+        - str: Results tab label.
+    """
+    selected_input = input_file or ""
+
+    rows: list[dict] = []
+    store_rows: dict[str, list[dict]] = {}
+    for name, store in [
+        ("HiGHS", highs_store or {}),
+        ("SCIP", scip_store or {}),
+        ("Stride", stride_store or {}),
+    ]:
+        if store.get("run_click") == run_click:
+            store_rows[name] = store.get("rows", [])
+            rows.extend(store_rows[name])
+        else:
+            store_rows[name] = []
+
+    if not rows:
+        return waiting_panel(), True, "Results"
+
+    summary_rows = summarize_runs(rows)
+    known_optimal = KNOWN_OPTIMA.get(selected_input)
+
+    # Build per-solver best schedules for the comparison chart.
+    # JSON round-trip turns int keys into strings — convert them back.
+    solver_schedules: dict[str, tuple[dict, dict]] = {}
+    for name, s_rows in store_rows.items():
+        ok_rows = [r for r in s_rows if r.get("ok") and r.get("starts")]
+        if ok_rows:
+            best = min(ok_rows, key=lambda r: r.get("energy") or float("inf"))
+            starts = {int(k): v for k, v in best["starts"].items()}
+            modes = {int(k): v for k, v in best["modes"].items()}
+            solver_schedules[name] = (starts, modes)
+
+    ok_energies = [
+        row["best_energy"]
+        for row in summary_rows
+        if row["ok_runs"] > 0 and row["best_energy"] is not None
+    ]
+    min_energy = min(ok_energies) if ok_energies else None
+
+    # Compute per-solver peak mechanics/technicians for the cost breakdown table.
+    _label_map = {
+        "HiGHS": SolverType.HIGHS.label,
+        "SCIP": SolverType.SCIP.label,
+        "Stride": SolverType.STRIDE.label,
+    }
+    solver_peaks: dict[str, tuple[int, int]] = {}
+    mech_rate = 100
+    tech_rate = 51
+    if solver_schedules and selected_input:
+        _profile = parse_mps_structure(selected_input)
+        _hire_rates = _profile.get("hire_rates", {"Mechaniker": 100.0, "Techniker": 51.0})
+        mech_rate = int(_hire_rates["Mechaniker"]) or 100
+        tech_rate = int(_hire_rates["Techniker"]) or 51
+        for _store_name, (_starts, _modes) in solver_schedules.items():
+            _mech, _tech, _ = _compute_demand(_profile, _starts, _modes)
+            _r_m = math.ceil(max(_mech, default=0))
+            _r_t = math.ceil(max(_tech, default=0))
+            _label = _label_map.get(_store_name, _store_name)
+            solver_peaks[_label] = (_r_m, _r_t)
+
+    summary_table = comparison_summary_table(
+        summary_rows, min_energy, known_optimal, solver_peaks, mech_rate, tech_rate
+    )
+    fig = build_comparison_graph(selected_input, solver_schedules) if solver_schedules else None
+    results = results_layout(comparison_panel(fig), summary_table)
+
+    return results, False, "Results"
+
+
+# ---------------------------------------------------------------------------
+# 7. Predecessor highlighting — hover over any job bar to dim all unrelated jobs.
+#    clear_on_unhover=True on each solver graph resets hoverData to None when
+#    the cursor leaves, which triggers this callback and restores full opacity.
+# ---------------------------------------------------------------------------
+
+
+def _compute_ancestors(job: int, edges: list[tuple[int, int]]) -> set[int]:
+    """Return all transitive predecessors of ``job`` via a backwards BFS.
+
+    Args:
+        job: The job whose ancestors are to be found.
+        edges: List of ``(src, dst)`` precedence pairs.
+
+    Returns:
+        Set of job IDs that must complete before ``job`` can start.
+    """
+    predecessors: dict[int, list[int]] = {}
+    for src, dst in edges:
+        predecessors.setdefault(dst, []).append(src)
+
+    visited: set[int] = set()
+    queue = [job]
+    while queue:
+        node = queue.pop()
+        for pred in predecessors.get(node, []):
+            if pred not in visited:
+                visited.add(pred)
+                queue.append(pred)
+    return visited
+
+
+@dash.callback(
+    Output({"type": "solver-graph", "index": MATCH}, "figure"),
+    Input({"type": "solver-graph", "index": MATCH}, "hoverData"),
+    State({"type": "solver-graph", "index": MATCH}, "figure"),
+    State("input-file-select", "value"),
+    prevent_initial_call=True,
+)
+def highlight_predecessors(
+    hover_data: dict | None,
+    current_figure: dict,
+    input_file: str,
+) -> Patch:
+    """Dim all bars except the hovered job and its predecessors.
+
+    Fires on every hover event.  When the cursor leaves the graph
+    (``hover_data`` is ``None`` due to ``clear_on_unhover=True``), all bar
+    opacities are restored to 1.
+
+    Args:
+        hover_data: Plotly hoverData from the solver graph, or ``None``.
+        current_figure: Current serialized figure dict (used for reset detection).
+        input_file: Path to the selected MPS input file.
+
+    Returns:
+        A ``Patch`` that updates per-bar marker opacities in-place.
+    """
+    p = Patch()
+
+    # --- Reset: mouse left the chart ---
+    if hover_data is None:
+        for i, trace in enumerate(current_figure.get("data", [])):
+            if trace.get("type") == "bar":
+                p["data"][i]["marker"]["opacity"] = [1.0] * len(trace.get("y", []))
+        return p
+
+    # --- Parse hovered job ---
+    point = hover_data["points"][0]
+    y_label = point.get("y", "")
+    if not isinstance(y_label, str) or not y_label.startswith("Job "):
+        raise PreventUpdate
+
+    try:
+        hovered_job = int(y_label.split()[-1])
+    except ValueError:
+        raise PreventUpdate
+
+    # --- Compute highlight set (hovered job + all ancestors) ---
+    profile = parse_mps_structure(input_file or "")
+    ancestors = _compute_ancestors(hovered_job, profile.get("edges", []))
+    highlight_set = ancestors | {hovered_job}
+
+    # --- Apply per-bar opacity to every bar trace ---
+    for i, trace in enumerate(current_figure.get("data", [])):
+        if trace.get("type") != "bar":
+            continue
+        opacities = [
+            1.0 if (
+                isinstance(y, str)
+                and y.startswith("Job ")
+                and int(y.split()[-1]) in highlight_set
+            ) else 0.15
+            for y in trace.get("y", [])
+        ]
+        p["data"][i]["marker"]["opacity"] = opacities
+
+    return p
+
+
+@dash.callback(
+    Output("input-graph", "figure", allow_duplicate=True),
+    Input("input-graph", "hoverData"),
+    State("input-graph", "figure"),
+    State("input-file-select", "value"),
+    prevent_initial_call=True,
+)
+def highlight_predecessors_input(
+    hover_data: dict | None,
+    current_figure: dict,
+    input_file: str,
+) -> Patch:
+    """Dim all bars except the hovered job and its predecessors on the Input tab.
+
+    Args:
+        hover_data: Plotly hoverData from the input graph, or ``None``.
+        current_figure: Current serialized figure dict.
+        input_file: Path to the selected MPS input file.
+
+    Returns:
+        A ``Patch`` that updates per-bar marker opacities in-place.
+    """
+    p = Patch()
+
+    if hover_data is None:
+        for i, trace in enumerate(current_figure.get("data", [])):
+            if trace.get("type") == "bar":
+                p["data"][i]["marker"]["opacity"] = [1.0] * len(trace.get("y", []))
+        return p
+
+    point = hover_data["points"][0]
+    y_label = point.get("y", "")
+    if not isinstance(y_label, str) or not y_label.startswith("Job "):
+        raise PreventUpdate
+
+    try:
+        hovered_job = int(y_label.split()[-1])
+    except ValueError:
+        raise PreventUpdate
+
+    profile = parse_mps_structure(input_file or "")
+    ancestors = _compute_ancestors(hovered_job, profile.get("edges", []))
+    highlight_set = ancestors | {hovered_job}
+
+    for i, trace in enumerate(current_figure.get("data", [])):
+        if trace.get("type") != "bar":
+            continue
+        opacities = [
+            1.0 if (
+                isinstance(y, str)
+                and y.startswith("Job ")
+                and int(y.split()[-1]) in highlight_set
+            ) else 0.15
+            for y in trace.get("y", [])
+        ]
+        p["data"][i]["marker"]["opacity"] = opacities
+
+    return p

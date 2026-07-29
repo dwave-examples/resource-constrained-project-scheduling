@@ -1,4 +1,4 @@
-# Copyright 2024 D-Wave
+# Copyright 2026 D-Wave
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,20 +16,16 @@ from enum import Enum
 
 
 class SolverType(Enum):
-    """Add a list of solver options here. If this demo only requires 1 solver,
-    this functionality can be removed.
-    """
+    """Supported formulations for RCPSP comparison."""
 
-    SOLVER_1 = 0
-    SOLVER_2 = 1
+    HIGHS = 0
+    SCIP = 1
+    STRIDE = 2
 
     @property
     def label(self):
         return {
-            SolverType.SOLVER_1: "Solver 1",
-            SolverType.SOLVER_2: "Solver 2",
+            SolverType.HIGHS: "HiGHS (MILP)",
+            SolverType.SCIP: "SCIP (MILP)",
+            SolverType.STRIDE: "Stride\u2122 Hybrid Solver",
         }[self]
-
-
-### If any settings or variables are being used repeatedly, throughout the code, create a new
-### Enum for the setting here to avoid string comparisons or other fragile code practices.

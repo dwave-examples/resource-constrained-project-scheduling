@@ -1,4 +1,4 @@
-# Copyright 2024 D-Wave
+# Copyright 2026 D-Wave
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,22 +13,17 @@
 # limitations under the License.
 
 """This file stores the Dash HTML layout for the app."""
+
 from __future__ import annotations
+
 from enum import EnumMeta
+from pathlib import Path
 
-from dash import dcc, html
 import dash_mantine_components as dmc
+import plotly.graph_objects as go
+from dash import dcc, html
 
-from demo_configs import (
-    CHECKLIST,
-    DESCRIPTION,
-    DROPDOWN,
-    MAIN_HEADER,
-    RADIO,
-    SLIDER,
-    SOLVER_TIME,
-    THUMBNAIL,
-)
+from demo_configs import DESCRIPTION, INPUTS, MAIN_HEADER, RUNS, SOLVER_TIME, THUMBNAIL
 from src.demo_enums import SolverType
 
 THEME_COLOR = "#2d4376"
@@ -86,18 +81,19 @@ def range_slider(label: str, id: str, config: dict) -> html.Div:
                 thumbFromLabel=f"{label} slider start",
                 thumbToLabel=f"{label} slider end",
                 color=THEME_COLOR,
-            )
-        ]
+            ),
+        ],
     )
 
 
-def dropdown(label: str, id: str, options: list) -> html.Div:
+def dropdown(label: str, id: str, options: list, value: str | None = None) -> html.Div:
     """Dropdown element for option selection.
 
     Args:
         label: The title that goes above the dropdown.
         id: A unique selector for this element.
         options: A list of dictionaries of labels and values.
+        value: Optional selected value.
     """
     return html.Div(
         className="dropdown-wrapper",
@@ -106,7 +102,7 @@ def dropdown(label: str, id: str, options: list) -> html.Div:
             dmc.Select(
                 id=id,
                 data=options,
-                value=options[0]["value"],
+                value=value if value is not None else options[0]["value"],
                 allowDeselect=False,
             ),
         ],
@@ -133,7 +129,9 @@ def checklist(label: str, id: str, options: list, values: list, inline: bool = T
                 value=values,
                 children=dmc.Group(
                     [
-                        dmc.Checkbox(label=option["label"], value=option["value"], color=THEME_COLOR)
+                        dmc.Checkbox(
+                            label=option["label"], value=option["value"], color=THEME_COLOR
+                        )
                         for option in options
                     ],
                 ),
@@ -192,7 +190,7 @@ def radio(label: str, id: str, options: list, value: str, inline: bool = True) -
     )
 
 
-def input(label: str, id: str, configs: dict, type: str="number") -> html.Div:
+def input(label: str, id: str, configs: dict, type: str = "number") -> html.Div:
     """Input element for either text or number input.
 
     Args:
@@ -205,12 +203,16 @@ def input(label: str, id: str, configs: dict, type: str="number") -> html.Div:
         className="input-wrapper",
         children=[
             html.Label(label, htmlFor=id),
-            dmc.TextInput(
-                id=id,
-                **configs,
-            ) if type == "text" else dmc.NumberInput(
-                id=id,
-                **configs,
+            (
+                dmc.TextInput(
+                    id=id,
+                    **configs,
+                )
+                if type == "text"
+                else dmc.NumberInput(
+                    id=id,
+                    **configs,
+                )
             ),
         ],
     )
@@ -240,40 +242,39 @@ def generate_settings_form() -> html.Div:
     Returns:
         A Div containing the settings for selecting the scenario, model, and solver.
     """
-    dropdown_options = generate_options(DROPDOWN)
-    checklist_options = generate_options(CHECKLIST)
-    radio_options = generate_options(RADIO)
     solver_options = generate_options(SolverType)
+    input_dir = Path("input")
+    file_options = sorted(
+        [
+            {"label": str(path.name), "value": str(path)}
+            for path in input_dir.glob("*")
+            if path.is_file()
+        ],
+        key=lambda option: option["label"],
+    )
+
+    default_input = INPUTS[0] if INPUTS else (file_options[0]["value"] if file_options else "")
 
     return html.Div(
         className="settings",
         children=[
-            slider(
-                "Example Slider",
-                "slider",
-                SLIDER,
-            ),
             dropdown(
-                "Example Dropdown",
-                "dropdown",
-                sorted(dropdown_options, key=lambda op: op["value"]),
+                "Scenario",
+                "input-file-select",
+                file_options or [{"label": default_input, "value": default_input}],
+                value=default_input,
+            ),
+            slider(
+                "Runs Per Solver",
+                "runs",
+                RUNS,
             ),
             checklist(
-                "Example Checklist",
-                "checklist",
-                sorted(checklist_options, key=lambda op: op["value"]),
-                [checklist_options[0]["value"]],
-            ),
-            radio(
-                "Example Radio",
-                "radio",
-                sorted(radio_options, key=lambda op: op["value"]),
-                radio_options[0]["value"],
-            ),
-            dropdown(
-                "Solver",
-                "solver-type-select",
+                "Solvers",
+                "solver-selection",
                 sorted(solver_options, key=lambda op: op["value"]),
+                [option["value"] for option in solver_options],
+                inline=False,
             ),
             input(
                 "Solver Time Limit (seconds)",
@@ -300,62 +301,183 @@ def generate_run_buttons() -> html.Div:
     )
 
 
-def generate_table(table_data: dict[str, list]) -> html.Table:
-    """Generate a table containing table_data.
+def solver_not_selected_panel(solver_name: str) -> html.Div:
+    """Placeholder content for a solver tab when the solver was not selected.
 
     Args:
-        table_data: A dictionary of table header keys and table column values.
+        solver_name: Human-readable name of the solver (e.g. ``"HiGHS"``).
 
     Returns:
-        An HTML table containing table_data.
+        An html.Div containing a short explanatory message.
     """
-    table_columns = table_data.values()
-    num_rows = len(next(iter(table_columns)))
+    return html.Div([html.P(f"{solver_name} was not selected.")])
 
+
+def solver_solution_panel(has_solution: bool, figure: go.Figure, solver_index: str) -> dcc.Graph | html.P:
+    """Return a graph of the solver's best solution, or a 'no solution' message.
+
+    Args:
+        has_solution: Whether the solver produced a feasible schedule.
+        figure: A Plotly figure to display when ``has_solution`` is ``True``.
+        solver_index: Short key identifying this solver (e.g. ``"highs"``), used
+            as the ``index`` of the pattern-matching graph ID.
+
+    Returns:
+        A dcc.Graph wrapping the figure, or an html.P placeholder if no solution
+        was found within the time limit.
+    """
+    if has_solution:
+        return dcc.Graph(
+            id={"type": "solver-graph", "index": solver_index},
+            figure=figure,
+            config={"displayModeBar": False},
+            responsive=True,
+            clear_on_unhover=True,
+        )
+    return html.H2(
+        "No solution found within the given time limit.",
+        className="placeholder-text",
+    )
+
+
+def waiting_panel() -> html.Div:
+    """Placeholder shown on the Results tab while solvers are still running.
+
+    Returns:
+        An html.Div containing a short status message.
+    """
+    return html.Div([html.P("Waiting for solvers to finish...")])
+
+
+def comparison_panel(figure: go.Figure | None) -> dcc.Graph | html.H4:
+    """Wrap the comparison Plotly figure in a dcc.Graph, or show a fallback message.
+
+    Args:
+        figure: A Plotly figure to display, or ``None`` if no solutions are available.
+
+    Returns:
+        A dcc.Graph wrapping the figure, or an html.H4 placeholder if ``figure`` is
+        ``None``.
+    """
+    if figure is None:
+        return html.H4(
+            "No solutions found to compare.",
+            className="placeholder-text",
+        )
+    return dcc.Graph(figure=figure, config={"displayModeBar": False}, responsive=True)
+
+
+def comparison_summary_table(
+    summary_rows: list[dict],
+    min_energy: int | float | None,
+    known_optimal: int | float | None,
+    solver_peaks: dict[str, tuple[int, int]] | None = None,
+    mech_rate: int = 100,
+    tech_rate: int = 51,
+) -> html.Table:
+    """Build the highlighted Comparison Summary table.
+
+    Rows with 0 OK runs are highlighted red; the row with the lowest best
+    energy is highlighted teal; known-optimal values are annotated.
+
+    Args:
+        summary_rows: Aggregated result rows as returned by ``summarize_runs``.
+        min_energy: The lowest best-energy value across all solvers, used for
+            row highlighting. Pass ``None`` if no feasible solutions exist.
+        known_optimal: The known optimal objective value for the instance, or
+            ``None`` if unknown.
+        solver_peaks: Mapping of formulation label → ``(peak_mechanics, peak_technicians)``
+            used to render the cost breakdown columns. Pass ``None`` to omit.
+        mech_rate: Cost per mechanic (default 100).
+        tech_rate: Cost per technician (default 51).
+
+    Returns:
+        An html.Table with styled rows and an ``(optimal)`` annotation where
+        applicable.
+    """
+
+    def fmt_energy(val: object) -> str:
+        if val is None:
+            return "n/a"
+        s = str(val)
+        if known_optimal is not None and val == known_optimal:
+            return f"{s} (optimal)"
+        return s
+
+    def row_class(row: dict) -> str:
+        if row["ok_runs"] == 0:
+            return "row-highlight-fail"
+        if min_energy is not None and row["best_energy"] == min_energy:
+            return "row-highlight-best"
+        return ""
+
+    def fmt_peak(formulation: str, idx: int, rate: int) -> str:
+        if solver_peaks is None:
+            return "–"
+        peaks = solver_peaks.get(formulation)
+        if peaks is None:
+            return "–"
+        count = peaks[idx]
+        return f"{count * rate}"
+
+    headers = [
+        "Formulation",
+        "Runs",
+        "OK Runs",
+        "Mechanics Cost",
+        "Technicians Cost",
+        "Best Energy",
+        "Avg Energy",
+    ]
     return html.Table(
         className="problem-details-table",
         children=[
-            html.Thead(html.Tr([html.Th(table_header) for table_header in table_data.keys()])),
+            html.Thead(html.Tr([html.Th(h) for h in headers])),
             html.Tbody(
                 [
                     html.Tr(
-                        [
-                            html.Td(column[i]) for column in table_columns
-                        ]
-                    ) for i in range(num_rows)
+                        className=row_class(row),
+                        children=[
+                            html.Td(str(row["formulation"])),
+                            html.Td(str(row["runs"])),
+                            html.Td(str(row["ok_runs"])),
+                            html.Td(fmt_peak(row["formulation"], 0, mech_rate)),
+                            html.Td(fmt_peak(row["formulation"], 1, tech_rate)),
+                            html.Td(fmt_energy(row["best_energy"])),
+                            html.Td(str(row["avg_energy"])),
+                        ],
+                    )
+                    for row in summary_rows
                 ]
             ),
         ],
     )
 
 
-def problem_details(index: int) -> html.Div:
-    """Generate the problem details section.
+def results_layout(comparison_element: dcc.Graph | html.H4, summary_table: html.Table) -> html.Div:
+    """Build the Results tab content with a comparison graph and summary table.
 
     Args:
-        index: Unique element id to differentiate matching elements. Must be different from left
-            column collapse button.
+        comparison_element: A dcc.Graph or placeholder element for the comparison
+            chart, displayed on the left.
+        summary_table: The html.Table built by ``comparison_summary_table``,
+            displayed on the right.
 
     Returns:
-        Div containing a collapsable table.
+        An html.Div with a flex layout containing the comparison element and table.
     """
     return html.Div(
-        id={"type": "to-collapse-class", "index": index},
-        className="details-collapse-wrapper collapsed",
+        className="results-layout",
         children=[
-            # Problem details collapsible button and header
-            html.Button(
-                id={"type": "collapse-trigger", "index": index},
-                className="details-collapse",
+            html.Div(
+                className="results-layout__table",
                 children=[
-                    html.H5("Problem Details"),
-                    html.Div(className="collapse-arrow"),
+                    summary_table,
                 ],
-                **{"aria-expanded": "true"},
             ),
             html.Div(
-                className="details-to-collapse",
-                id="problem-details",
+                className="results-layout__graph",
+                children=comparison_element,
             ),
         ],
     )
@@ -375,6 +497,12 @@ def create_interface() -> html.Div:
             ),
             # Below are any temporary storage items, e.g., for sharing data between callbacks.
             dcc.Store(id="run-in-progress", data=False),  # Indicates whether run is in progress
+            dcc.Store(id="running-highs", data=False),
+            dcc.Store(id="running-scip", data=False),
+            dcc.Store(id="running-stride", data=False),
+            dcc.Store(id="highs-store", data={}),
+            dcc.Store(id="scip-store", data={}),
+            dcc.Store(id="stride-store", data={}),
             # Settings and results columns
             html.Main(
                 className="columns-main",
@@ -457,6 +585,24 @@ def create_interface() -> html.Div:
                                                                 id="results-tab",
                                                                 disabled=True,
                                                             ),
+                                                            dmc.TabsTab(
+                                                                "HiGHS",
+                                                                value="highs-tab",
+                                                                id="highs-tab",
+                                                                disabled=True,
+                                                            ),
+                                                            dmc.TabsTab(
+                                                                "SCIP",
+                                                                value="scip-tab",
+                                                                id="scip-tab",
+                                                                disabled=True,
+                                                            ),
+                                                            dmc.TabsTab(
+                                                                "Stride",
+                                                                value="stride-tab",
+                                                                id="stride-tab",
+                                                                disabled=True,
+                                                            ),
                                                         ]
                                                     ),
                                                 ]
@@ -475,10 +621,19 @@ def create_interface() -> html.Div:
                                                         parent_className="input",
                                                         type="circle",
                                                         color=THEME_COLOR,
+                                                        delay_show=300,
                                                         # A Dash callback (in app.py) will generate content in the Div below
-                                                        children=html.Div(id="input"),
+                                                        children=html.Div(
+                                                            id="input",
+                                                            children=dcc.Graph(
+                                                                id="input-graph",
+                                                                config={"displayModeBar": False},
+                                                                responsive=True,
+                                                                clear_on_unhover=True,
+                                                            ),
+                                                        ),
                                                     ),
-                                                ]
+                                                ],
                                             )
                                         ],
                                     ),
@@ -493,11 +648,64 @@ def create_interface() -> html.Div:
                                                         parent_className="results",
                                                         type="circle",
                                                         color=THEME_COLOR,
-                                                        # A Dash callback (in app.py) will generate content in the Div below
+                                                        delay_show=300,
+                                                        # A Dash callback will generate content in the Div below
                                                         children=html.Div(id="results"),
                                                     ),
-                                                    # Problem details dropdown
-                                                    html.Div([html.Hr(), problem_details(1)]),
+                                                ],
+                                            )
+                                        ],
+                                    ),
+                                    dmc.TabsPanel(
+                                        value="highs-tab",
+                                        tabIndex="14",
+                                        children=[
+                                            html.Div(
+                                                className="tab-content-wrapper",
+                                                children=[
+                                                    dcc.Loading(
+                                                        parent_className="results",
+                                                        type="circle",
+                                                        color=THEME_COLOR,
+                                                        delay_show=300,
+                                                        children=html.Div(id="highs-results"),
+                                                    ),
+                                                ],
+                                            )
+                                        ],
+                                    ),
+                                    dmc.TabsPanel(
+                                        value="scip-tab",
+                                        tabIndex="15",
+                                        children=[
+                                            html.Div(
+                                                className="tab-content-wrapper",
+                                                children=[
+                                                    dcc.Loading(
+                                                        parent_className="results",
+                                                        type="circle",
+                                                        color=THEME_COLOR,
+                                                        delay_show=300,
+                                                        children=html.Div(id="scip-results"),
+                                                    ),
+                                                ],
+                                            )
+                                        ],
+                                    ),
+                                    dmc.TabsPanel(
+                                        value="stride-tab",
+                                        tabIndex="16",
+                                        children=[
+                                            html.Div(
+                                                className="tab-content-wrapper",
+                                                children=[
+                                                    dcc.Loading(
+                                                        parent_className="results",
+                                                        type="circle",
+                                                        color=THEME_COLOR,
+                                                        delay_show=300,
+                                                        children=html.Div(id="stride-results"),
+                                                    ),
                                                 ],
                                             )
                                         ],
