@@ -23,7 +23,14 @@ import dash_mantine_components as dmc
 import plotly.graph_objects as go
 from dash import dcc, html
 
-from demo_configs import DESCRIPTION, INPUTS, MAIN_HEADER, RUNS, SOLVER_TIME, THUMBNAIL
+from demo_configs import (
+    DESCRIPTION,
+    INPUT_LABELS,
+    MAIN_HEADER,
+    RUNS,
+    SOLVER_TIME,
+    THUMBNAIL,
+)
 from src.demo_enums import SolverType
 
 THEME_COLOR = "#2d4376"
@@ -246,14 +253,12 @@ def generate_settings_form() -> html.Div:
     input_dir = Path("input")
     file_options = sorted(
         [
-            {"label": str(path.name), "value": str(path)}
+            {"label": INPUT_LABELS.get(str(path), str(path.name)), "value": str(path)}
             for path in input_dir.glob("*")
             if path.is_file()
         ],
         key=lambda option: option["label"],
     )
-
-    default_input = INPUTS[0] if INPUTS else (file_options[0]["value"] if file_options else "")
 
     return html.Div(
         className="settings",
@@ -261,8 +266,8 @@ def generate_settings_form() -> html.Div:
             dropdown(
                 "Scenario",
                 "input-file-select",
-                file_options or [{"label": default_input, "value": default_input}],
-                value=default_input,
+                file_options,
+                value=file_options[0]["value"],
             ),
             slider(
                 "Runs Per Solver",

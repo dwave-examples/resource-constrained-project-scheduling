@@ -19,14 +19,18 @@ THUMBNAIL = "static/dwave_logo.svg"
 APP_TITLE = "Resource-Constrained Project Scheduling"
 MAIN_HEADER = "Resource-Constrained Project Scheduling"
 DESCRIPTION = """\
-Compare objective values and solver statuses for three formulations on the same RCPSP instance:
-HiGHS MILP, SCIP MILP, and D-Wave Stride\u2122 Hybrid Solver.
+Compare objective values and solver statuses for three formulations (HiGHS MILP, SCIP MILP, and
+D-Wave Stride\u2122 Hybrid Solver) on the same MIPLIB RCPSP instance.
 """
 
-INPUTS = ["input/30n20b8.mps"]
+# Human-readable labels for input files, keyed by input file path.
+# The first entry is the default selection.
+INPUT_LABELS = {
+    "input/30n20b8.mps": "30 Jobs",
+}
 
 # Known optimal objective values keyed by input file path.
-# Add an entry here whenever a new instance with a known optimal is added to INPUTS.
+# Add an entry here whenever a new instance with a known optimal is added to INPUT_LABELS.
 KNOWN_OPTIMA = {
     "input/30n20b8.mps": 302,
 }
@@ -48,5 +52,5 @@ SOLVER_TIME = {
     "min": 5,
     "max": 300,
     "step": 5,
-    "value": 15,
+    "value": 45,
 }
