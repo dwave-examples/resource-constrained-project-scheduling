@@ -3,5 +3,9 @@
 	// Debian stable with the second-latest Python, latest Ocean, and optional dev packages.
 	// Docker image source: https://github.com/dwavesystems/ocean-dev-docker.
 	// Devcontainer config: https://github.com/dwavesystems/ocean-devcontainer.
-	"image": "docker.io/dwavesys/ocean-dev:latest"
+	"image": "docker.io/dwavesys/ocean-dev:latest",
+    "hostRequirements": {
+        "cpus": 16,
+        "memory": "64gb"
+    }
 }
